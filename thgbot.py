@@ -6,6 +6,19 @@ import sys
 from typing import Optional
 import datetime
 
+try:
+    datadir = os.environ['SNAP_DATA']
+except:
+    print('SNAP_DATA must be set')
+
+try:
+    apikey = os.environ['TOKEN']
+except:
+    print('TOKEN must be set')
+    sys.exit(1)
+
+prompt_image_dir = os.path.join(datadir, 'prompt_images')
+
 class MyBot(commands.Bot):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(command_prefix='!', intents=intents)
@@ -150,13 +163,13 @@ async def save_prompt(interaction: discord.Interaction, file: Optional[discord.A
     role = interaction.guild.get_role(role_id)
     if role in interaction.user.roles:
         try:
-            if not os.path.exists('prompt_images'):
-                os.makedirs('prompt_images')
+            if not os.path.exists(prompt_image_dir):
+                os.makedirs(prompt_image_dir)
             if not file:
                 modal = PromptModal(interaction)
                 await interaction.response.send_modal(modal)
             elif file.filename.endswith(".png") or file.filename.endswith(".jpg"):
-                file_path = f"prompt_images/{file.filename}"
+                file_path = os.path.join(prompt_image_dir, file.filename)
                 await file.save(file_path)
                 modal = PromptModal(interaction, file.filename)
                 await interaction.response.send_modal(modal)
@@ -175,13 +188,13 @@ async def add_to_prompt(interaction: discord.Interaction, file: Optional[discord
     role = interaction.guild.get_role(role_id)
     if role in interaction.user.roles:
         try:
-            if not os.path.exists('prompt_images'):
-                os.makedirs('prompt_images')
+            if not os.path.exists(prompt_image_dir):
+                os.makedirs(prompt_image_dir)
             if not file:
                 modal = AddToPromptModal(interaction)
                 await interaction.response.send_modal(modal)
             elif file.filename.endswith(".png") or file.filename.endswith(".jpg"):
-                file_path = f"prompt_images/{file.filename}"
+                file_path = os.path.join(prompt_image_dir, file.filename)
                 await file.save(file_path)
                 modal = AddToPromptModal(interaction, file.filename)
                 await interaction.response.send_modal(modal)
@@ -219,7 +232,7 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
                         first_message = False
                 if bot.prompt_images[prompt_id]:
                     file_name = bot.prompt_images[prompt_id]
-                    file_path = f"prompt_images/{file_name}"
+                    file_path = os.path.join(prompt_image_dir, file_name)
                     await channel.send(file=discord.File(file_path))
                 await interaction.response.send_message(f"Prompt {prompt_id} sent in channel {channel}")
                 await log_channel.send(embed=log_embed)
@@ -299,7 +312,7 @@ async def sendAllPrompts(interaction: discord.Interaction):
                 if bot.prompt_images[prompt_id] and prompt_id in bot.prompt_images:
                     try:
                         file_name = bot.prompt_images[prompt_id]
-                        file_path = f"prompt_images/{file_name}"
+                        file_path = os.path.join(prompt_image_dir, file_name)
                         await channel.send(file=discord.File(file_path))
                     except discord.Forbidden:
                         print(f"Forbidden to send files to {channel.name}")
@@ -355,9 +368,4 @@ def split_message(message: str) -> list[str]:
     messages.append(message)
     return messages
 
-try:
-    apikey = os.environ['TOKEN']
-except:
-    print('TOKEN must be set')
-    sys.exit(1)
 bot.run(apikey)
