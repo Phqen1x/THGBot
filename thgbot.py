@@ -1,6 +1,10 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from promptview import PromptView
+from promptmodal import PromptModal
+from addtopromptmodal import AddToPromptModal
+from confirmationview import ConfirmationView
 import os
 import sys
 from typing import Optional
@@ -68,117 +72,6 @@ async def prompt_ids_list(interaction: discord.Interaction):
 async def view_prompt_ids(interaction: discord.Interaction):
     await prompt_ids_list(interaction)
 
-class TributeChannelSelector(discord.ui.Select):
-    def __init__(self, channels):
-        options = [
-            discord.SelectOption(label=channel.name, description=channel.name, value=str(channel.id))
-            for channel in channels
-        ]
-        super().__init__(placeholder='Select a channel', max_values=1, min_values=1, options=options)
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        self.channel_id = (self.values[0])
-        self.view.stop()
-
-class PromptView(discord.ui.View):
-    def __init__(self, channels):
-        super().__init__()
-        self.channel_select = TributeChannelSelector(channels)
-        self.add_item(self.channel_select)
-
-    @property
-    def channel_id(self):
-        return int(self.channel_select.values[0])
-
-class PromptModal(discord.ui.Modal):
-    def __init__(self, interaction: discord.Interaction, file_name: str = None) -> None:
-        super().__init__(title="Prompt Submission")
-        self.interaction = interaction
-        self.channels = [channel for channel in interaction.guild.channels 
-                         if isinstance(channel, discord.TextChannel) and channel.category_id == 1395987021712986133]
-        self.add_item(discord.ui.TextInput(label="Prompt ID", placeholder="Enter the prompt id", custom_id="prompt_id"))
-        self.add_item(discord.ui.TextInput(label="Prompt", placeholder="Enter your prompt", custom_id="prompt", style=discord.TextStyle.paragraph))
-        self.file_name = file_name
-
-    async def on_submit(self, interaction: discord.Interaction):
-        try:
-            prompt_id = self.children[0].value.upper().strip()
-            prompt = self.children[1].value
-            bot.prompt_info[prompt_id] = {}
-            if self.file_name:
-                bot.prompt_info[prompt_id]['image'] = self.file_name
-            
-            view = PromptView(self.channels)
-            msg = await interaction.response.send_message("Select a channel:", view=view, ephemeral=True)
-            await view.wait()
-            channel_id = view.channel_select.channel_id
-
-            bot.prompt_info[prompt_id]['message'] = prompt
-            bot.prompt_info[prompt_id]['channel'] = channel_id
-            log_channel = bot.get_channel(bot.log_channel_id)
-            log_embed = discord.Embed(
-                    title=f"{prompt_id} prompt saved.",
-                    color=discord.Color.blue())
-            log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
-            log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
-            log_embed.timestamp = datetime.datetime.now()
-            if log_channel:
-                await log_channel.send(embed=log_embed)
-                messages = split_message(prompt)
-                for message in messages:
-                    await log_channel.send(message)
-            else:
-                print(f"Log channel not found: {log_channel_id}")
-            await interaction.followup.send(f"Prompt save with ID {prompt_id}", ephemeral=True)
-        except Exception as e:
-            await interaction.followup.send("An error occurred. Please try again.", ephemeral=True)
-            print(f"Error: {e}")
-        # Saves prompts to json
-        bot.save()
-
-
-class AddToPromptModal(discord.ui.Modal):
-    def __init__(self, interaction: discord.Interaction, file_name: str = None) -> None:
-        super().__init__(title="Prompt Addendum")
-        self.interaction = interaction
-        self.channels = [channel for channel in interaction.guild.channels 
-                         if isinstance(channel, discord.TextChannel) and channel.category_id == 1395987021712986133]
-        self.add_item(discord.ui.TextInput(label="Prompt ID", placeholder="Enter the prompt id", custom_id="prompt_id"))
-        self.add_item(discord.ui.TextInput(label="Prompt Addendum", placeholder="Enter your prompt addition", custom_id="prompt_addendum", style=discord.TextStyle.paragraph))
-        self.file_name = file_name
-
-    async def on_submit(self, interaction: discord.Interaction):
-        try:
-            prompt_id = self.children[0].value.upper().strip()
-            prompt = self.children[1].value
-            bot.prompt_info[prompt_id] = {}
-            if self.file_name:
-                bot.prompt_info[prompt_id]['image'] = self.file_name
-            
-            bot.prompt_info[prompt_id] += prompt
-            log_channel = bot.get_channel(bot.log_channel_id)
-            log_embed = discord.Embed(
-                    title=f"{prompt_id} prompt has been added to.",
-                    color=discord.Color.green())
-            log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
-            log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
-            log_embed.timestamp = datetime.datetime.now()
-            if log_channel:
-                await log_channel.send(embed=log_embed)
-                messages = split_message(prompt)
-                for message in messages:
-                    await log_channel.send(message)
-            else:
-                print(f"Log channel not found: {log_channel_id}")
-            await interaction.response.send_message(f"{prompt_id} Prompt edited successfully.", ephemeral=True)
-        except Exception as e:
-            await interaction.followup.send("An error occurred. Please try again.", ephemeral=True)
-            print(f"Error: {e}")
-        # Saves prompts to json
-        bot.save()
-        
-
 @bot.tree.command(name="save-prompt", description="Stores prompt info using a modal UI")
 async def save_prompt(interaction: discord.Interaction, file: Optional[discord.Attachment]):
     role_id =  1396889274615599134
@@ -188,8 +81,10 @@ async def save_prompt(interaction: discord.Interaction, file: Optional[discord.A
             if not os.path.exists(prompt_image_dir):
                 os.makedirs(prompt_image_dir)
             if not file:
-                modal = PromptModal(interaction)
+                print('before')
+                modal = PromptModal(interaction, bot)
                 await interaction.response.send_modal(modal)
+                print('after')
             elif file.filename.endswith(".png") or file.filename.endswith(".jpg"):
                 file_path = os.path.join(prompt_image_dir, file.filename)
                 await file.save(file_path)
@@ -259,29 +154,6 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
             await log_channel.send(embed=log_embed)
     else:
         await interaction.response.send_message("Prompt not found")
-
-class ConfirmationView(discord.ui.View):
-    def __init__(self):
-        super().__init__()
-        self.confirmed = False
-
-        self.send_button = discord.ui.Button(label="Send", style=discord.ButtonStyle.green)
-        self.send_button.callback = self.send_callback
-        self.add_item(self.send_button)
-
-        self.cancel_button = discord.ui.Button(label="Cancel", style=discord.ButtonStyle.red)
-        self.cancel_button.callback = self.cancel_callback
-        self.add_item(self.cancel_button)
-
-    async def send_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        self.confirmed = True
-        self.stop()
-
-    async def cancel_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        self.confirmed = False
-        self.stop()
 
 @bot.tree.command(name="send-all-prompts", description="Send all prompts")
 @commands.has_role("Admin")
@@ -374,16 +246,5 @@ async def viewPrompt(interaction:discord.Interaction, prompt_id: str):
             await interaction.response.send_message("Prompt is empty", ephemeral=True)
     else:
         await interaction.response.send_message("Prompt not found", ephemeral=True)
-
-def split_message(message: str) -> list[str]:
-    messages = []
-    while len(message) > 2000:
-        index = message[:2000].rfind('\n')
-        if index == -1:
-            index = 2000
-        messages.append(message[:index])
-        message = message[index:]
-    messages.append(message)
-    return messages
 
 bot.run(token)
