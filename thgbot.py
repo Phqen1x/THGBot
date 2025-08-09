@@ -5,6 +5,7 @@ import os
 import sys
 from typing import Optional
 import datetime
+import json
 
 try:
     datadir = os.environ['SNAP_DATA']
@@ -12,21 +13,30 @@ except:
     print('SNAP_DATA must be set')
 
 try:
-    apikey = os.environ['TOKEN']
+    token = os.environ['TOKEN']
 except:
     print('TOKEN must be set')
     sys.exit(1)
 
 prompt_image_dir = os.path.join(datadir, 'prompt_images')
+prompt_dir = os.path.join(datadir, 'prompts')
 
 class MyBot(commands.Bot):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(command_prefix='!', intents=intents)
-        self.prompts = {}
-        self.channels = {}
-        self.prompt_images = {}
+        self.prompt_info = {} 
         self.guild = None
         self.log_channel_id = 1396701637925408908
+
+    def save(self):
+        pass
+
+    def load(self):
+        #if os.path.exists(os.join(prompt_dir, "prompt_info.json")):
+        #    self.prompt_info = json.dumps(os.join(prompt_dir, "prompt_info.json"))
+        #else:
+        #    self.prompt_info = {}
+        pass
 
     async def on_ready(self):
         self.guild = self.get_guild(793600464570548254)
@@ -39,8 +49,8 @@ intents.message_content = True
 bot = MyBot(intents=intents)
 
 async def prompt_ids_list(interaction: discord.Interaction):
-    if bot.prompts:
-        prompt_ids = list(bot.prompts.keys())
+    if bot.prompt_info:
+        prompt_ids = list(bot.prompt_info.keys())
         embed = discord.Embed(
             title='**Prompt IDs:**\n',
             description=f'**{"\n".join(prompt_ids)}**',
@@ -91,15 +101,16 @@ class PromptModal(discord.ui.Modal):
         try:
             prompt_id = self.children[0].value.upper().strip()
             prompt = self.children[1].value
-            bot.prompt_images[prompt_id] = self.file_name
+            bot.prompt_info[prompt_id] = {}
+            bot.prompt_info[prompt_id]['image'] = self.file_name
             
             view = PromptView(self.channels)
             msg = await interaction.response.send_message("Select a channel:", view=view, ephemeral=True)
             await view.wait()
             channel_id = view.channel_select.channel_id
 
-            bot.prompts[prompt_id] = prompt
-            bot.channels[prompt_id] = channel_id
+            bot.prompt_info[prompt_id]['message'] = prompt
+            bot.prompt_info[prompt_id]['channel'] = channel_id
             log_channel = bot.get_channel(bot.log_channel_id)
             log_embed = discord.Embed(
                     title=f"{prompt_id} prompt saved.",
@@ -134,9 +145,10 @@ class AddToPromptModal(discord.ui.Modal):
         try:
             prompt_id = self.children[0].value.upper().strip()
             prompt = self.children[1].value
-            bot.prompt_images[prompt_id] = self.file_name
+            bot.prompt_info[prompt_id] = {}
+            bot.prompt_info[prompt_id]['image'] = self.file_name
             
-            bot.prompts[prompt_id] += prompt
+            bot.prompt_info[prompt_id] += prompt
             log_channel = bot.get_channel(bot.log_channel_id)
             log_embed = discord.Embed(
                     title=f"{prompt_id} prompt has been added to.",
@@ -211,33 +223,30 @@ async def add_to_prompt(interaction: discord.Interaction, file: Optional[discord
 async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
     # Sends the prompt
     prompt_id = prompt_id.strip().upper()
-    if prompt_id in bot.prompts:
-        if prompt_id in bot.channels:
-            channel = interaction.guild.get_channel(int(bot.channels.get(prompt_id)))
-            log_channel = bot.get_channel(bot.log_channel_id)
-            log_embed = discord.Embed(
-                    title=f"{prompt_id} prompt sent to {channel.mention}",
-                    color=discord.Color.green())
-            log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
-            log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
-            log_embed.timestamp = datetime.datetime.now()
-            if channel:
-                message = bot.prompts[prompt_id]
-                messages = split_message(message)
-                first_message = True
-                for msg in messages:
-                    message = await channel.send(msg)
-                    if first_message:
-                        await message.pin()
-                        first_message = False
-                if bot.prompt_images[prompt_id]:
-                    file_name = bot.prompt_images[prompt_id]
-                    file_path = os.path.join(prompt_image_dir, file_name)
-                    await channel.send(file=discord.File(file_path))
-                await interaction.response.send_message(f"Prompt {prompt_id} sent in channel {channel}")
-                await log_channel.send(embed=log_embed)
-        else:
-            await interaction.response.send_message("Channel not found")
+    if prompt_id in bot.prompt_info:
+        channel = interaction.guild.get_channel(int(bot.prompt_info[prompt_id]['channel']))
+        log_channel = bot.get_channel(bot.log_channel_id)
+        log_embed = discord.Embed(
+                title=f"{prompt_id} prompt sent to {channel.mention}",
+                color=discord.Color.green())
+        log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
+        log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
+        log_embed.timestamp = datetime.datetime.now()
+        if channel:
+            message = bot.prompt_info[prompt_id]['message']
+            messages = split_message(message)
+            first_message = True
+            for msg in messages:
+                message = await channel.send(msg)
+                if first_message:
+                    await message.pin()
+                    first_message = False
+            if 'image' in bot.prompt_info[prompt_id].keys():
+                file_name = bot.prompt_info[prompt_id]['image']
+                file_path = os.path.join(prompt_image_dir, file_name)
+                await channel.send(file=discord.File(file_path))
+            await interaction.response.send_message(f"Prompt {prompt_id} sent in channel {channel}")
+            await log_channel.send(embed=log_embed)
     else:
         await interaction.response.send_message("Prompt not found")
 
@@ -270,11 +279,11 @@ async def sendAllPrompts(interaction: discord.Interaction):
     # Sends all the prompts
 
     confirmSend = ConfirmationView()
-    print(len(bot.prompts))
-    await interaction.response.send_message(f"There are {len(bot.prompts)} prompts saved. Are you sure you want to send all prompts?", ephemeral=True, view=confirmSend)
+    print(len(bot.prompt_info.keys()))
+    await interaction.response.send_message(f"There are {len(bot.prompt_info.keys())} prompts saved. Are you sure you want to send all prompts?", ephemeral=True, view=confirmSend)
     await confirmSend.wait()
-    prompt_keys = list(bot.prompts.keys())
-    prompt_mentions = [f"<#{channel}>" for channel in bot.channels.values() if channel]
+    prompt_keys = list(bot.prompt_info.keys())
+    prompt_mentions = [f"<#{bot.prompt_info[prompt_id]['channel']}>" for prompt_id in bot.prompt_info.keys() if bot.prompt_info[prompt_id]['channel']]
     log_channel = bot.get_channel(bot.log_channel_id)
     log_embed = discord.Embed(
             title=f"All prompts sent.",
@@ -286,38 +295,37 @@ async def sendAllPrompts(interaction: discord.Interaction):
     log_embed.timestamp = datetime.datetime.now()
     
     if confirmSend.confirmed:
-        for prompt_id, channel in bot.channels.items():
-            channel_id = bot.channels.get(prompt_id)
-            if prompt_id in bot.prompts:
-                channel = interaction.guild.get_channel(int(channel_id))
-                if channel:
-                    try:
-                        message = bot.prompts[prompt_id]
-                        messages = split_message(message)
-                        first_message = True
-                        for msg in messages:
-                            pin_message = await channel.send(msg)
-                            if first_message:
-                                await pin_message.pin()
-                                first_message = False
-                        print(f"Sent prompt {prompt_id} to {channel.name}")
-                    except discord.Forbidden:
-                        await interaction.followup.send(f"The bot doesn't have permission to send files in {channel.name}")
-                        print(f"Forbidden to send messages to {channel.name}")
-                    except discord.HTTPException as e:
-                        print(f"HTTP exception while sending message to {channel.name}: {e}")
-                else:
-                    await interaction.followup.send(f"Channel {channel} does not exit")
-                    print(f"Channel {channel} does not exist")
-                if bot.prompt_images[prompt_id] and prompt_id in bot.prompt_images:
-                    try:
-                        file_name = bot.prompt_images[prompt_id]
-                        file_path = os.path.join(prompt_image_dir, file_name)
-                        await channel.send(file=discord.File(file_path))
-                    except discord.Forbidden:
-                        print(f"Forbidden to send files to {channel.name}")
-                    except discord.HTTPException as e:
-                        print(f"HTTP exception while sneding message to {channel.name}: {e}")
+        for prompt_id in bot.prompt_info.keys():
+            channel_id = bot.prompt_info[prompt_id]['channel']
+            channel = interaction.guild.get_channel(int(channel_id))
+            if channel:
+                try:
+                    message = bot.prompt_info[prompt_id]['message']
+                    messages = split_message(message)
+                    first_message = True
+                    for msg in messages:
+                        pin_message = await channel.send(msg)
+                        if first_message:
+                            await pin_message.pin()
+                            first_message = False
+                    print(f"Sent prompt {prompt_id} to {channel.name}")
+                except discord.Forbidden:
+                    await interaction.followup.send(f"The bot doesn't have permission to send files in {channel.name}")
+                    print(f"Forbidden to send messages to {channel.name}")
+                except discord.HTTPException as e:
+                    print(f"HTTP exception while sending message to {channel.name}: {e}")
+            else:
+                await interaction.followup.send(f"Channel {channel} does not exit")
+                print(f"Channel {channel} does not exist")
+            if 'image' in bot.prompt_info[prompt_id].keys():
+                try:
+                    file_name = bot.prompt_info[prompt_id]['image']
+                    file_path = os.path.join(prompt_image_dir, file_name)
+                    await channel.send(file=discord.File(file_path))
+                except discord.Forbidden:
+                    print(f"Forbidden to send files to {channel.name}")
+                except discord.HTTPException as e:
+                    print(f"HTTP exception while sneding message to {channel.name}: {e}")
         await interaction.followup.send("All prompts have been sent")
         await log_channel.send(embed=log_embed)
     else:
@@ -329,11 +337,11 @@ async def clearAllPrompts(interaction: discord.Interaction):
     # Clears all the prompts
     try:
         confirmSend = ConfirmationView()
-        await interaction.response.send_message(f"There are {len(bot.prompts)} prompts saved. Are you sure you want to delete all prompts?", ephemeral=True, view=confirmSend)
+        await interaction.response.send_message(f"There are {len(bot.prompt_info.keys())} prompts saved. Are you sure you want to delete all prompts?", ephemeral=True, view=confirmSend)
         await confirmSend.wait()
         if confirmSend.confirmed:
-            bot.prompts = {}
-            bot.channels = {}
+            bot.prompt_info = {}
+            bot.save()
             await interaction.followup.send("Prompts cleared", ephemeral=True)
         else:
             await interaction.followup.send("Cancelled clearing all prompts!")
@@ -345,8 +353,8 @@ async def clearAllPrompts(interaction: discord.Interaction):
 @commands.has_role("Gamemaker")
 async def viewPrompt(interaction:discord.Interaction, prompt_id: str):
     prompt_id = prompt_id.upper().strip()
-    if prompt_id in bot.prompts:
-        message = bot.prompts[prompt_id]
+    if prompt_id in bot.prompt_info.keys():
+        message = bot.prompt_info[prompt_id]['message']
         messages = split_message(message)
         if messages:
             await interaction.response.send_message(messages[0], ephemeral=True)
@@ -368,4 +376,4 @@ def split_message(message: str) -> list[str]:
     messages.append(message)
     return messages
 
-bot.run(apikey)
+bot.run(token)
