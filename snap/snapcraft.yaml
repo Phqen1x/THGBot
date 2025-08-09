@@ -1,0 +1,29 @@
+name: thg-discord-bot
+version: git
+summary: thg-discord-bot
+description: thg-discord-bot
+base: core24
+platforms:
+  amd64:
+confinement: strict
+grade: stable
+
+apps:
+  thg-discord-bot:
+    daemon: simple
+    restart-condition: always
+    command: bin/start.sh
+    plugs:
+      - network
+
+parts:
+  thg-discord-bot:
+    source: .
+    plugin: python
+    python-packages:
+      - discord
+    override-build: |
+      craftctl default
+      mkdir -p $CRAFT_PART_INSTALL/bin
+      cp start.sh $CRAFT_PART_INSTALL/bin/
+      cp thgbot.py $CRAFT_PART_INSTALL/bin/
