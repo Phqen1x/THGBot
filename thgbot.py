@@ -25,18 +25,22 @@ class MyBot(commands.Bot):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(command_prefix='!', intents=intents)
         self.prompt_info = {} 
+        self.load()
         self.guild = None
         self.log_channel_id = 1396701637925408908
 
     def save(self):
-        pass
+        if not os.path.exists(prompt_dir):
+            os.makedirs(prompt_dir)
+        with open(os.path.join(prompt_dir, 'prompt_info.json'), 'w') as f:
+            json.dump(self.prompt_info, f)
 
     def load(self):
-        #if os.path.exists(os.join(prompt_dir, "prompt_info.json")):
-        #    self.prompt_info = json.dumps(os.join(prompt_dir, "prompt_info.json"))
-        #else:
-        #    self.prompt_info = {}
-        pass
+        if os.path.exists(os.path.join(prompt_dir, "prompt_info.json")):
+            with open(os.path.join(prompt_dir, 'prompt_info.json'), 'r') as f:
+                self.prompt_info = json.load(f)
+        else:
+            self.prompt_info = {}
 
     async def on_ready(self):
         self.guild = self.get_guild(793600464570548254)
@@ -102,7 +106,8 @@ class PromptModal(discord.ui.Modal):
             prompt_id = self.children[0].value.upper().strip()
             prompt = self.children[1].value
             bot.prompt_info[prompt_id] = {}
-            bot.prompt_info[prompt_id]['image'] = self.file_name
+            if self.file_name:
+                bot.prompt_info[prompt_id]['image'] = self.file_name
             
             view = PromptView(self.channels)
             msg = await interaction.response.send_message("Select a channel:", view=view, ephemeral=True)
@@ -129,6 +134,8 @@ class PromptModal(discord.ui.Modal):
         except Exception as e:
             await interaction.followup.send("An error occurred. Please try again.", ephemeral=True)
             print(f"Error: {e}")
+        # Saves prompts to json
+        bot.save()
 
 
 class AddToPromptModal(discord.ui.Modal):
@@ -146,7 +153,8 @@ class AddToPromptModal(discord.ui.Modal):
             prompt_id = self.children[0].value.upper().strip()
             prompt = self.children[1].value
             bot.prompt_info[prompt_id] = {}
-            bot.prompt_info[prompt_id]['image'] = self.file_name
+            if self.file_name:
+                bot.prompt_info[prompt_id]['image'] = self.file_name
             
             bot.prompt_info[prompt_id] += prompt
             log_channel = bot.get_channel(bot.log_channel_id)
@@ -167,6 +175,8 @@ class AddToPromptModal(discord.ui.Modal):
         except Exception as e:
             await interaction.followup.send("An error occurred. Please try again.", ephemeral=True)
             print(f"Error: {e}")
+        # Saves prompts to json
+        bot.save()
         
 
 @bot.tree.command(name="save-prompt", description="Stores prompt info using a modal UI")
