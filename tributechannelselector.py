@@ -7,7 +7,6 @@ class TributeChannelSelector(discord.ui.Select):
             for channel in channels
         ]
         super().__init__(placeholder='Select a channel', max_values=1, min_values=1, options=options)
-        print('TributeChannel')
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()

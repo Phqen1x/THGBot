@@ -1,27 +1,29 @@
 from utils import split_message
 import discord
+import datetime
 
 class AddToPromptModal(discord.ui.Modal):
     def __init__(self, interaction: discord.Interaction, bot = None, file_name: str = None) -> None:
         super().__init__(title="Prompt Addendum")
         self.interaction = interaction
+        self.bot = bot
         self.channels = [channel for channel in interaction.guild.channels 
                          if isinstance(channel, discord.TextChannel) and channel.category_id == 1395987021712986133]
         self.add_item(discord.ui.TextInput(label="Prompt ID", placeholder="Enter the prompt id", custom_id="prompt_id"))
         self.add_item(discord.ui.TextInput(label="Prompt Addendum", placeholder="Enter your prompt addition", custom_id="prompt_addendum", style=discord.TextStyle.paragraph))
         self.file_name = file_name
-        print('AddToPromptModal')
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
             prompt_id = self.children[0].value.upper().strip()
             prompt = self.children[1].value
-            bot.prompt_info[prompt_id] = {}
+            if prompt_id not in self.bot.prompt_info.keys():
+                self.bot.prompt_info[prompt_id] = {}
             if self.file_name:
-                bot.prompt_info[prompt_id]['image'] = self.file_name
+                self.bot.prompt_info[prompt_id]['image'] = self.file_name
             
-            bot.prompt_info[prompt_id] += prompt
-            log_channel = bot.get_channel(bot.log_channel_id)
+            self.bot.prompt_info[prompt_id]['message'] += prompt
+            log_channel = self.bot.get_channel(self.bot.log_channel_id)
             log_embed = discord.Embed(
                     title=f"{prompt_id} prompt has been added to.",
                     color=discord.Color.green())
@@ -40,6 +42,6 @@ class AddToPromptModal(discord.ui.Modal):
             await interaction.followup.send("An error occurred. Please try again.", ephemeral=True)
             print(f"Error: {e}")
         # Saves prompts to json
-        bot.save()
+        self.bot.save()
         
 

@@ -5,6 +5,7 @@ from promptview import PromptView
 from promptmodal import PromptModal
 from addtopromptmodal import AddToPromptModal
 from confirmationview import ConfirmationView
+from utils import split_message
 import os
 import sys
 from typing import Optional
@@ -88,7 +89,7 @@ async def save_prompt(interaction: discord.Interaction, file: Optional[discord.A
             elif file.filename.endswith(".png") or file.filename.endswith(".jpg"):
                 file_path = os.path.join(prompt_image_dir, file.filename)
                 await file.save(file_path)
-                modal = PromptModal(interaction, file.filename)
+                modal = PromptModal(interaction, bot, file.filename)
                 await interaction.response.send_modal(modal)
             else:
                 await interaction.response.send_message("Please upload a .png or .jpg file.")
@@ -108,12 +109,12 @@ async def add_to_prompt(interaction: discord.Interaction, file: Optional[discord
             if not os.path.exists(prompt_image_dir):
                 os.makedirs(prompt_image_dir)
             if not file:
-                modal = AddToPromptModal(interaction)
+                modal = AddToPromptModal(interaction, bot)
                 await interaction.response.send_modal(modal)
             elif file.filename.endswith(".png") or file.filename.endswith(".jpg"):
                 file_path = os.path.join(prompt_image_dir, file.filename)
                 await file.save(file_path)
-                modal = AddToPromptModal(interaction, file.filename)
+                modal = AddToPromptModal(interaction, bot, file.filename)
                 await interaction.response.send_modal(modal)
             else:
                 await interaction.response.send_message("Please upload a .png or .jpg file.")
