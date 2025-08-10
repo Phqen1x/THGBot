@@ -26,4 +26,4 @@ parts:
       craftctl default
       mkdir -p $CRAFT_PART_INSTALL/bin
       cp start.sh $CRAFT_PART_INSTALL/bin/
-      cp thgbot.py $CRAFT_PART_INSTALL/bin/
+      cp *.py $CRAFT_PART_INSTALL/bin/
