@@ -25,47 +25,123 @@ except:
 
 prompt_image_dir = os.path.join(datadir, 'prompt_images')
 prompt_dir = os.path.join(datadir, 'prompts')
+config_dir = os.path.join(datadir, 'config')
 
-class MyBot(commands.Bot):
+class THGBot(commands.Bot):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(command_prefix='!', intents=intents)
         self.prompt_info = {} 
+        self.config = {'log_channel_id':  None, 'category_id': None, 'guild_id': 1395951775160340551, 'gm_id': 1396889274615599134, 'admin_id': 1396889209037389886}
         self.load()
         self.guild = None
-        self.log_channel_id = 1396701637925408908
+        self.gm_id =  None
+        self.admin_id = None
 
     def save(self):
+        # Check for prompt_dir and save data to json
         if not os.path.exists(prompt_dir):
             os.makedirs(prompt_dir)
         with open(os.path.join(prompt_dir, 'prompt_info.json'), 'w') as f:
             json.dump(self.prompt_info, f)
 
+        # Check for config_dir and save data to json
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir)
+        with open(os.path.join(config_dir, 'config.json'), 'w') as f:
+            json.dump(self.config, f)
+
     def load(self):
+        # Check for prompt_dir and load json
         if os.path.exists(os.path.join(prompt_dir, "prompt_info.json")):
             with open(os.path.join(prompt_dir, 'prompt_info.json'), 'r') as f:
                 self.prompt_info = json.load(f)
         else:
             self.prompt_info = {}
 
+        # Check for config_dir and load json
+        if os.path.exists(os.path.join(config_dir, 'config.json')):
+            with open(os.path.join(config_dir, 'config.json'), 'r') as f:
+                self.config = json.load(f)
+        else:
+            #self.config = {}
+            pass
+
     async def on_ready(self):
-        self.guild = self.get_guild(793600464570548254)
+        self.guild = self.get_guild(self.config['guild_id'])
         await bot.tree.sync()
         print(f"Logged in as {self.user}")
 
 intents = discord.Intents.default()
 intents.message_content = True
 
-bot = MyBot(intents=intents)
+bot = THGBot(intents=intents)
+
+
+@bot.tree.command(name='set-log-channel', description='Sets the channel for logs to be sent to')
+async def set_log_channel(interaction: discord.Interaction, channel_id: Optional[str], channel_name: Optional[str]):
+    try:
+        if channel_id:
+            channel_id = channel_id.strip()
+            if any(channel.id == int(channel_id) for channel in bot.guild.channels):
+                bot.config['log_channel_id'] = int(channel_id)
+                bot.save()
+                await interaction.response.send_message(f'Log channel set to <#{bot.config["log_channel_id"]}>', ephemeral=True)
+            else:
+                await interaction.response.send_message('Channel not found', ephemeral=True)
+        elif channel_name:
+            channel_name = channel_name.strip()
+            for channel in bot.guild.channels:
+                if channel_name.lower() == channel.name.lower():
+                    bot.config['log_channel_id'] = channel.id
+                    await interaction.response.send_message(f'Log channel set to <#{bot.config["log_channel_id"]}>', ephemeral=True)
+                    bot.save()
+                    sent = True
+                    break
+            if not sent:
+                await interaction.response.send_message('Channel not found', ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message('An error occured. Please try again.')
+        print(f'Exception: {e}')
+
+@bot.tree.command(name='set-category', description='Sets the category for prompts to be sent to')
+async def set_category(interaction: discord.Interaction, category_id: Optional[str], category_name: Optional[str]):
+    try:
+        if category_id:
+            category_id = category_id.strip()
+            if any(category.id == int(category_id) for category in bot.guild.categories):
+                bot.config['category_id'] = int(category_id)
+                bot.save()
+                await interaction.response.send_message(f'Prompt category set to <#{bot.config["category_id"]}>', ephemeral=True)
+            else:
+                await interaction.response.send_message('Category not found', ephemeral=True)
+        elif category_name:
+            category_name = category_name.strip()
+            for category in bot.guild.categories:
+                if category_name.lower() == category.name.lower():
+                    bot.config['category_id'] = category.id
+                    bot.save()
+                    await interaction.response.send_message(f'Prompt category set to <#{bot.config["category_id"]}>', ephemeral=True)
+                    sent = True
+                    break
+            if not sent:
+                await interaction.response.send_message('Category not found', ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message("An error occured. Please try again.")
+        print(f'Exception: {e}')
 
 async def prompt_ids_list(interaction: discord.Interaction):
     if bot.prompt_info:
-        prompt_ids = list(bot.prompt_info.keys())
-        embed = discord.Embed(
-            title='**Prompt IDs:**\n',
-            description=f'**{"\n".join(prompt_ids)}**',
-            color=0x00ff00 # Green
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        prompt_keys = list(bot.prompt_info.keys())
+        prompt_mentions = [f"<#{bot.prompt_info[prompt_id]['channel']}>" for prompt_id in bot.prompt_info.keys() if bot.prompt_info[prompt_id]['channel']]
+        id_list_embed = discord.Embed(
+                title=f"**Prompts**\n",
+                color=discord.Color.green())
+        id_list_embed.add_field(name="**Prompt IDs**", value=f"**{"\n".join(prompt_keys)}**", inline=True)
+        id_list_embed.add_field(name="**Prompt channels**", value=f"{'\n'.join(prompt_mentions)}", inline=True)
+        id_list_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
+        id_list_embed.set_thumbnail(url=f"{interaction.user.avatar}")
+        id_list_embed.timestamp = datetime.datetime.now()
+        await interaction.response.send_message(embed=id_list_embed, ephemeral=True)
     else:
         await interaction.response.send_message("No prompts found", ephemeral=True)
 
@@ -73,19 +149,35 @@ async def prompt_ids_list(interaction: discord.Interaction):
 async def view_prompt_ids(interaction: discord.Interaction):
     await prompt_ids_list(interaction)
 
+@bot.tree.command(name="view-prompt", description="View a prompt")
+async def viewPrompt(interaction:discord.Interaction, prompt_id: str):
+    prompt_id = prompt_id.upper().strip()
+    if prompt_id in bot.prompt_info.keys():
+        message = bot.prompt_info[prompt_id]['message']
+        messages = split_message(message)
+        if messages:
+            await interaction.response.send_message(messages[0], ephemeral=True)
+            for msg in messages[1:]:
+                await interaction.followup.send(msg, ephemeral=True)
+            if 'image' in bot.prompt_info[prompt_id].keys():
+                file_name = bot.prompt_info[prompt_id]['image']
+                file_path = os.path.join(prompt_image_dir, file_name)
+                await interaction.followup.send(file=discord.File(file_path), ephemeral=True)
+        else:
+            await interaction.response.send_message("Prompt is empty", ephemeral=True)
+    else:
+        await interaction.response.send_message("Prompt not found", ephemeral=True)
+
 @bot.tree.command(name="save-prompt", description="Stores prompt info using a modal UI")
 async def save_prompt(interaction: discord.Interaction, file: Optional[discord.Attachment]):
-    role_id =  1396889274615599134
-    role = interaction.guild.get_role(role_id)
+    role = interaction.guild.get_role(bot.config['gm_id'])
     if role in interaction.user.roles:
         try:
             if not os.path.exists(prompt_image_dir):
                 os.makedirs(prompt_image_dir)
             if not file:
-                print('before')
                 modal = PromptModal(interaction, bot)
                 await interaction.response.send_modal(modal)
-                print('after')
             elif file.filename.endswith(".png") or file.filename.endswith(".jpg"):
                 file_path = os.path.join(prompt_image_dir, file.filename)
                 await file.save(file_path)
@@ -102,8 +194,7 @@ async def save_prompt(interaction: discord.Interaction, file: Optional[discord.A
 
 @bot.tree.command(name="add-to-prompt", description="Adds content to a prompt using a modal UI")
 async def add_to_prompt(interaction: discord.Interaction, file: Optional[discord.Attachment]):
-    role_id = 1396889274615599134
-    role = interaction.guild.get_role(role_id)
+    role = interaction.guild.get_role(bot.config['gm_id'])
     if role in interaction.user.roles:
         try:
             if not os.path.exists(prompt_image_dir):
@@ -131,7 +222,7 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
     prompt_id = prompt_id.strip().upper()
     if prompt_id in bot.prompt_info:
         channel = interaction.guild.get_channel(int(bot.prompt_info[prompt_id]['channel']))
-        log_channel = bot.get_channel(bot.log_channel_id)
+        log_channel = bot.get_channel(bot.config['log_channel_id'])
         log_embed = discord.Embed(
                 title=f"{prompt_id} prompt sent to {channel.mention}",
                 color=discord.Color.green())
@@ -151,7 +242,7 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
                 file_name = bot.prompt_info[prompt_id]['image']
                 file_path = os.path.join(prompt_image_dir, file_name)
                 await channel.send(file=discord.File(file_path))
-            await interaction.response.send_message(f"Prompt {prompt_id} sent in channel {channel}")
+            await interaction.response.send_message(f"Prompt {prompt_id} sent in channel {channel.mention}")
             await log_channel.send(embed=log_embed)
     else:
         await interaction.response.send_message("Prompt not found")
@@ -167,7 +258,7 @@ async def sendAllPrompts(interaction: discord.Interaction):
     await confirmSend.wait()
     prompt_keys = list(bot.prompt_info.keys())
     prompt_mentions = [f"<#{bot.prompt_info[prompt_id]['channel']}>" for prompt_id in bot.prompt_info.keys() if bot.prompt_info[prompt_id]['channel']]
-    log_channel = bot.get_channel(bot.log_channel_id)
+    log_channel = bot.get_channel(bot.config['log_channel_id'])
     log_embed = discord.Embed(
             title=f"All prompts sent.",
             color=discord.Color.green())
@@ -232,20 +323,5 @@ async def clearAllPrompts(interaction: discord.Interaction):
         print(e)
         await interaction.response.send_message("Prompts not cleared", ephemeral=True)
 
-@bot.tree.command(name="view-prompt", description="View a prompt")
-@commands.has_role("Gamemaker")
-async def viewPrompt(interaction:discord.Interaction, prompt_id: str):
-    prompt_id = prompt_id.upper().strip()
-    if prompt_id in bot.prompt_info.keys():
-        message = bot.prompt_info[prompt_id]['message']
-        messages = split_message(message)
-        if messages:
-            await interaction.response.send_message(messages[0], ephemeral=True)
-            for msg in messages[1:]:
-                await interaction.followup.send(msg, ephemeral=True)
-        else:
-            await interaction.response.send_message("Prompt is empty", ephemeral=True)
-    else:
-        await interaction.response.send_message("Prompt not found", ephemeral=True)
 
 bot.run(token)
