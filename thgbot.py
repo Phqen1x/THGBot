@@ -242,6 +242,8 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
                 file_name = bot.prompt_info[prompt_id]['image']
                 file_path = os.path.join(prompt_image_dir, file_name)
                 await channel.send(file=discord.File(file_path))
+            bot.prompt_info = {}
+            bot.save()
             await interaction.response.send_message(f"Prompt {prompt_id} sent in channel {channel.mention}")
             await log_channel.send(embed=log_embed)
     else:
@@ -254,7 +256,7 @@ async def sendAllPrompts(interaction: discord.Interaction):
 
     confirmSend = ConfirmationView()
     print(len(bot.prompt_info.keys()))
-    await interaction.response.send_message(f"There are {len(bot.prompt_info.keys())} prompts saved. Are you sure you want to send all prompts?", ephemeral=True, view=confirmSend)
+    await interaction.response.send_message(f"There are {len(bot.prompt_info.keys())} prompts saved. Are you sure you want to send all prompts? This will also clear them from the list.", ephemeral=True, view=confirmSend)
     await confirmSend.wait()
     prompt_keys = list(bot.prompt_info.keys())
     prompt_mentions = [f"<#{bot.prompt_info[prompt_id]['channel']}>" for prompt_id in bot.prompt_info.keys() if bot.prompt_info[prompt_id]['channel']]
@@ -282,6 +284,17 @@ async def sendAllPrompts(interaction: discord.Interaction):
                         if first_message:
                             await pin_message.pin()
                             first_message = False
+                    if 'image' in bot.prompt_info[prompt_id].keys():
+                        try:
+                            file_name = bot.prompt_info[prompt_id]['image']
+                            file_path = os.path.join(prompt_image_dir, file_name)
+                            await channel.send(file=discord.File(file_path))
+                        except discord.Forbidden:
+                            print(f"Forbidden to send files to {channel.name}")
+                        except discord.HTTPException as e:
+                            print(f"HTTP exception while sending message to {channel.name}: {e}")
+                    bot.prompt_info = {}
+                    bot.save()
                     print(f"Sent prompt {prompt_id} to {channel.name}")
                 except discord.Forbidden:
                     await interaction.followup.send(f"The bot doesn't have permission to send files in {channel.name}")
@@ -291,15 +304,6 @@ async def sendAllPrompts(interaction: discord.Interaction):
             else:
                 await interaction.followup.send(f"Channel {channel} does not exit")
                 print(f"Channel {channel} does not exist")
-            if 'image' in bot.prompt_info[prompt_id].keys():
-                try:
-                    file_name = bot.prompt_info[prompt_id]['image']
-                    file_path = os.path.join(prompt_image_dir, file_name)
-                    await channel.send(file=discord.File(file_path))
-                except discord.Forbidden:
-                    print(f"Forbidden to send files to {channel.name}")
-                except discord.HTTPException as e:
-                    print(f"HTTP exception while sneding message to {channel.name}: {e}")
         await interaction.followup.send("All prompts have been sent")
         await log_channel.send(embed=log_embed)
     else:
