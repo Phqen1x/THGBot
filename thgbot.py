@@ -31,7 +31,7 @@ class THGBot(commands.Bot):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(command_prefix='!', intents=intents)
         self.prompt_info = {} 
-        self.config = {'log_channel_id':  None, 'category_id': None, 'guild_id': 1395951775160340551, 'gm_id': 1396889274615599134, 'admin_id': 1396889209037389886}
+        self.config = {'log_channel_id':  None, 'category_id': None, 'guild_id': 706281858253717554, 'gm_id': None, 'admin_id': None}
         self.load()
         self.guild = None
         self.gm_id =  None
@@ -75,7 +75,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 bot = THGBot(intents=intents)
-
 
 @bot.tree.command(name='set-log-channel', description='Sets the channel for logs to be sent to')
 async def set_log_channel(interaction: discord.Interaction, channel_id: Optional[str], channel_name: Optional[str]):
@@ -170,8 +169,8 @@ async def viewPrompt(interaction:discord.Interaction, prompt_id: str):
 
 @bot.tree.command(name="save-prompt", description="Stores prompt info using a modal UI")
 async def save_prompt(interaction: discord.Interaction, file: Optional[discord.Attachment]):
-    role = interaction.guild.get_role(bot.config['gm_id'])
-    if role in interaction.user.roles:
+    # role = interaction.guild.get_role(bot.config['gm_id'])
+    # if role in interaction.user.roles:
         try:
             if not os.path.exists(prompt_image_dir):
                 os.makedirs(prompt_image_dir)
@@ -188,14 +187,14 @@ async def save_prompt(interaction: discord.Interaction, file: Optional[discord.A
         except Exception as e:
             await interaction.response.send_message("An error occured. Please try again.")
             print(f"Error: {e}")
-    else:
-        await interaction.response.send_message("You do not have the necessary role to run this command!")
+    # else:
+        # await interaction.response.send_message("You do not have the necessary role to run this command!")
 
 
 @bot.tree.command(name="add-to-prompt", description="Adds content to a prompt using a modal UI")
 async def add_to_prompt(interaction: discord.Interaction, file: Optional[discord.Attachment]):
-    role = interaction.guild.get_role(bot.config['gm_id'])
-    if role in interaction.user.roles:
+    # role = interaction.guild.get_role(bot.config['gm_id'])
+    # if role in interaction.user.roles:
         try:
             if not os.path.exists(prompt_image_dir):
                 os.makedirs(prompt_image_dir)
@@ -212,8 +211,8 @@ async def add_to_prompt(interaction: discord.Interaction, file: Optional[discord
         except Exception as e:
             await interaction.response.send_message("An error occured. Please try again.")
             print(f"Error: {e}")
-    else:
-        await interaction.response.send_message("You do not have the necessary role to run this command!")
+    # else:
+    #     await interaction.response.send_message("You do not have the necessary role to run this command!")
 
 
 @bot.tree.command(name="send-prompt", description="Send a prompt")
@@ -221,7 +220,7 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
     # Sends the prompt
     prompt_id = prompt_id.strip().upper()
     if prompt_id in bot.prompt_info:
-        channel = interaction.guild.get_channel(int(bot.prompt_info[prompt_id]['channel']))
+        channel = bot.guild.get_channel(int(bot.prompt_info[prompt_id]['channel']))
         log_channel = bot.get_channel(bot.config['log_channel_id'])
         log_embed = discord.Embed(
                 title=f"{prompt_id} prompt sent to {channel.mention}",
@@ -273,7 +272,7 @@ async def sendAllPrompts(interaction: discord.Interaction):
     if confirmSend.confirmed:
         for prompt_id in bot.prompt_info.keys():
             channel_id = bot.prompt_info[prompt_id]['channel']
-            channel = interaction.guild.get_channel(int(channel_id))
+            channel = bot.guild.get_channel(int(channel_id))
             if channel:
                 try:
                     message = bot.prompt_info[prompt_id]['message']
