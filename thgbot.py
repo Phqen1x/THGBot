@@ -278,6 +278,10 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
                 file_name = bot.prompt_info[prompt_id]['image']
                 file_path = os.path.join(prompt_image_dir, guild_id, file_name)
                 await channel.send(file=discord.File(file_path))
+                try:
+                    os.unlink(file_path)
+                except FileNotFoundError:
+                    pass
             bot.prompt_info = {}
             bot.save()
             await interaction.response.send_message(f"Prompt {prompt_id} sent in channel {channel.mention}")
@@ -327,6 +331,10 @@ async def sendAllPrompts(interaction: discord.Interaction):
                             file_name = bot.prompt_info[prompt_id]['image']
                             file_path = os.path.join(prompt_image_dir, guild_id, file_name)
                             await channel.send(file=discord.File(file_path))
+                            try:
+                                os.unlink(file_path)
+                            except FileNotFoundError:
+                                pass
                         except discord.Forbidden:
                             print(f"Forbidden to send files to {channel.name}")
                         except discord.HTTPException as e:
