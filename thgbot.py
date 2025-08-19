@@ -256,7 +256,7 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
     prompt_id = prompt_id.strip().upper()
     guild_id = str(interaction.guild.id)
     if prompt_id in bot.prompt_info:
-        channel = bot.guild.get_channel(int(bot.prompt_info[prompt_id]['channel']))
+        channel = interaction.guild.get_channel(int(bot.prompt_info[prompt_id]['channel']))
         log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
         log_embed = discord.Embed(
                 title=f"{prompt_id} prompt sent to {channel.mention}",
@@ -282,7 +282,7 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
                     os.unlink(file_path)
                 except FileNotFoundError:
                     pass
-            bot.prompt_info = {}
+            del bot.prompt_info[prompt_id]
             bot.save()
             await interaction.response.send_message(f"Prompt {prompt_id} sent in channel {channel.mention}")
             await log_channel.send(embed=log_embed)
@@ -314,7 +314,7 @@ async def sendAllPrompts(interaction: discord.Interaction):
     if confirmSend.confirmed:
         for prompt_id in bot.prompt_info.keys():
             channel_id = bot.prompt_info[prompt_id]['channel']
-            channel = bot.guild.get_channel(int(channel_id))
+            channel = interaction.guild.get_channel(int(channel_id))
             if channel:
                 try:
                     message = bot.prompt_info[prompt_id]['message']
