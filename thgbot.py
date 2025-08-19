@@ -31,11 +31,8 @@ class THGBot(commands.Bot):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(command_prefix='!', intents=intents)
         self.prompt_info = {} 
-        self.config = {'log_channel_id':  None, 'category_id': None, 'guild_id': 706281858253717554, 'gm_id': None, 'admin_id': None}
+        self.config = {}
         self.load()
-        self.guild = None
-        self.gm_id =  None
-        self.admin_id = None
 
     def save(self):
         # Check for prompt_dir and save data to json
@@ -49,6 +46,7 @@ class THGBot(commands.Bot):
             os.makedirs(config_dir)
         with open(os.path.join(config_dir, 'config.json'), 'w') as f:
             json.dump(self.config, f)
+        print(self.config)
 
     def load(self):
         # Check for prompt_dir and load json
@@ -63,11 +61,10 @@ class THGBot(commands.Bot):
             with open(os.path.join(config_dir, 'config.json'), 'r') as f:
                 self.config = json.load(f)
         else:
-            #self.config = {}
+            self.config = {}
             pass
 
     async def on_ready(self):
-        self.guild = self.get_guild(self.config['guild_id'])
         await bot.tree.sync()
         print(f"Logged in as {self.user}")
 
@@ -75,58 +72,102 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 bot = THGBot(intents=intents)
+@bot.event
+async def on_guild_join(guild):
+    guild_id = str(guild.id)
+    guild_prompts_dir = os.path.join(datadir, 'prompt', str(guild_id))
+    bot.config[guild_id] = {'log_channel_id':  None, 'category_id': None}
+    bot.save()
 
 @bot.tree.command(name='set-log-channel', description='Sets the channel for logs to be sent to')
 async def set_log_channel(interaction: discord.Interaction, channel_id: Optional[str], channel_name: Optional[str]):
-    try:
-        if channel_id:
-            channel_id = channel_id.strip()
-            if any(channel.id == int(channel_id) for channel in bot.guild.channels):
-                bot.config['log_channel_id'] = int(channel_id)
+    guild_id = str(interaction.guild.id)
+    print(f'channel_id: {channel_id}')
+    print(f'First: {bot.config}')
+    if channel_id:
+        channel_id = channel_id.strip()
+        print(f'Second: {bot.config}')
+        if any(channel.id == int(channel_id) for channel in interaction.guild.channels):
+            print(f'Third: {bot.config}')
+            bot.config[guild_id]['log_channel_id'] = int(channel_id)
+            bot.save()
+            try:
+                await interaction.response.send_message(f'Log channel set to <#{bot.config[guild_id]["log_channel_id"]}>', ephemeral=True)
+            except Exception as e:
+                await interaction.response.send_message('An error occured. Please try again.')
+                print(f'Exception: {e}')
+        else:
+            try:
+                await interaction.response.send_message('Channel not found', ephemeral=True)
+            except Exception as e:
+                await interaction.response.send_message('An error occured. Please try again.')
+                print(f'Exception: {e}')
+    elif channel_name:
+        channel_name = channel_name.strip()
+        for channel in interaction.guild.channels:
+            if channel_name.lower() == channel.name.lower():
+                bot.config[guild_id]['log_channel_id'] = channel.id
+                try:
+                    await interaction.response.send_message(f'Log channel set to <#{bot.config[guild_id]["log_channel_id"]}>', ephemeral=True)
+                except Exception as e:
+                    await interaction.response.send_message('An error occured. Please try again.')
+                    print(f'Exception: {e}')
                 bot.save()
-                await interaction.response.send_message(f'Log channel set to <#{bot.config["log_channel_id"]}>', ephemeral=True)
-            else:
+                sent = True
+                break
+        if not sent:
+            try:
                 await interaction.response.send_message('Channel not found', ephemeral=True)
-        elif channel_name:
-            channel_name = channel_name.strip()
-            for channel in bot.guild.channels:
-                if channel_name.lower() == channel.name.lower():
-                    bot.config['log_channel_id'] = channel.id
-                    await interaction.response.send_message(f'Log channel set to <#{bot.config["log_channel_id"]}>', ephemeral=True)
-                    bot.save()
-                    sent = True
-                    break
-            if not sent:
-                await interaction.response.send_message('Channel not found', ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message('An error occured. Please try again.')
-        print(f'Exception: {e}')
+            except Exception as e:
+                await interaction.response.send_message('An error occured. Please try again.')
+                print(f'Exception: {e}')
+    else:
+        try:
+            await interaction.response.send_message('Provide an argument', ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message('An error occured. Please try again.')
+            print(f'Exception: {e}')
 
 @bot.tree.command(name='set-category', description='Sets the category for prompts to be sent to')
 async def set_category(interaction: discord.Interaction, category_id: Optional[str], category_name: Optional[str]):
-    try:
-        if category_id:
-            category_id = category_id.strip()
-            if any(category.id == int(category_id) for category in bot.guild.categories):
-                bot.config['category_id'] = int(category_id)
+    guild_id = str(interaction.guild.id)
+    sent = False
+    if category_id:
+        category_id = category_id.strip()
+        if any(category.id == int(category_id) for category in interaction.guild.categories):
+            bot.config[guild_id]['category_id'] = int(category_id)
+            bot.save()
+            try:
+                await interaction.response.send_message(f'Prompt category set to <#{bot.config[guild_id]["category_id"]}>', ephemeral=True)
+            except Exception as e:
+                await interaction.response.send_message('An error occured. Please try again.')
+                print(f'Exception: {e}')
+
+        else:
+            try:
+                await interaction.response.send_message('Category not found', ephemeral=True)
+            except Exception as e:
+                await interaction.response.send_message('An error occured. Please try again.')
+                print(f'Exception: {e}')
+    elif category_name:
+        category_name = category_name.strip()
+        for category in interaction.guild.categories:
+            if category_name.lower() == category.name.lower():
+                bot.config[guild_id]['category_id'] = category.id
                 bot.save()
-                await interaction.response.send_message(f'Prompt category set to <#{bot.config["category_id"]}>', ephemeral=True)
-            else:
+                try:
+                    await interaction.response.send_message(f'Prompt category set to <#{bot.config[guild_id]["category_id"]}>', ephemeral=True)
+                except Exception as e:
+                    await interaction.response.send_message('An error occured. Please try again.')
+                    print(f'Exception: {e}')
+                sent = True
+                break
+        if not sent:
+            try:
                 await interaction.response.send_message('Category not found', ephemeral=True)
-        elif category_name:
-            category_name = category_name.strip()
-            for category in bot.guild.categories:
-                if category_name.lower() == category.name.lower():
-                    bot.config['category_id'] = category.id
-                    bot.save()
-                    await interaction.response.send_message(f'Prompt category set to <#{bot.config["category_id"]}>', ephemeral=True)
-                    sent = True
-                    break
-            if not sent:
-                await interaction.response.send_message('Category not found', ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message("An error occured. Please try again.")
-        print(f'Exception: {e}')
+            except Exception as e:
+                await interaction.response.send_message('An error occured. Please try again.')
+                print(f'Exception: {e}')
 
 async def prompt_ids_list(interaction: discord.Interaction):
     if bot.prompt_info:
@@ -169,8 +210,6 @@ async def viewPrompt(interaction:discord.Interaction, prompt_id: str):
 
 @bot.tree.command(name="save-prompt", description="Stores prompt info using a modal UI")
 async def save_prompt(interaction: discord.Interaction, file: Optional[discord.Attachment]):
-    # role = interaction.guild.get_role(bot.config['gm_id'])
-    # if role in interaction.user.roles:
         try:
             if not os.path.exists(prompt_image_dir):
                 os.makedirs(prompt_image_dir)
@@ -187,14 +226,10 @@ async def save_prompt(interaction: discord.Interaction, file: Optional[discord.A
         except Exception as e:
             await interaction.response.send_message("An error occured. Please try again.")
             print(f"Error: {e}")
-    # else:
-        # await interaction.response.send_message("You do not have the necessary role to run this command!")
 
 
 @bot.tree.command(name="add-to-prompt", description="Adds content to a prompt using a modal UI")
 async def add_to_prompt(interaction: discord.Interaction, file: Optional[discord.Attachment]):
-    # role = interaction.guild.get_role(bot.config['gm_id'])
-    # if role in interaction.user.roles:
         try:
             if not os.path.exists(prompt_image_dir):
                 os.makedirs(prompt_image_dir)
@@ -211,17 +246,16 @@ async def add_to_prompt(interaction: discord.Interaction, file: Optional[discord
         except Exception as e:
             await interaction.response.send_message("An error occured. Please try again.")
             print(f"Error: {e}")
-    # else:
-    #     await interaction.response.send_message("You do not have the necessary role to run this command!")
 
 
 @bot.tree.command(name="send-prompt", description="Send a prompt")
 async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
     # Sends the prompt
     prompt_id = prompt_id.strip().upper()
+    guild_id = interaction.guild.id
     if prompt_id in bot.prompt_info:
         channel = bot.guild.get_channel(int(bot.prompt_info[prompt_id]['channel']))
-        log_channel = bot.get_channel(bot.config['log_channel_id'])
+        log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
         log_embed = discord.Embed(
                 title=f"{prompt_id} prompt sent to {channel.mention}",
                 color=discord.Color.green())
@@ -257,9 +291,10 @@ async def sendAllPrompts(interaction: discord.Interaction):
     print(len(bot.prompt_info.keys()))
     await interaction.response.send_message(f"There are {len(bot.prompt_info.keys())} prompts saved. Are you sure you want to send all prompts? This will also clear them from the list.", ephemeral=True, view=confirmSend)
     await confirmSend.wait()
+    guild_id = interaction.guild.id
     prompt_keys = list(bot.prompt_info.keys())
     prompt_mentions = [f"<#{bot.prompt_info[prompt_id]['channel']}>" for prompt_id in bot.prompt_info.keys() if bot.prompt_info[prompt_id]['channel']]
-    log_channel = bot.get_channel(bot.config['log_channel_id'])
+    log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
     log_embed = discord.Embed(
             title=f"All prompts sent.",
             color=discord.Color.green())
