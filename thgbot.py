@@ -192,6 +192,7 @@ async def view_prompt_ids(interaction: discord.Interaction):
 @bot.tree.command(name="view-prompt", description="View a prompt")
 async def viewPrompt(interaction:discord.Interaction, prompt_id: str):
     prompt_id = prompt_id.upper().strip()
+    guild_id = str(interaction.guild.id)
     if prompt_id in bot.prompt_info.keys():
         message = bot.prompt_info[prompt_id]['message']
         messages = split_message(message)
@@ -201,7 +202,8 @@ async def viewPrompt(interaction:discord.Interaction, prompt_id: str):
                 await interaction.followup.send(msg, ephemeral=True)
             if 'image' in bot.prompt_info[prompt_id].keys():
                 file_name = bot.prompt_info[prompt_id]['image']
-                file_path = os.path.join(prompt_image_dir, file_name)
+                os.makedirs(os.path.join(prompt_image_dir, guild_id), exist_ok=True)
+                file_path = os.path.join(prompt_image_dir, guild_id, file_name)
                 await interaction.followup.send(file=discord.File(file_path), ephemeral=True)
         else:
             await interaction.response.send_message("Prompt is empty", ephemeral=True)
@@ -210,49 +212,49 @@ async def viewPrompt(interaction:discord.Interaction, prompt_id: str):
 
 @bot.tree.command(name="save-prompt", description="Stores prompt info using a modal UI")
 async def save_prompt(interaction: discord.Interaction, file: Optional[discord.Attachment]):
-        try:
-            if not os.path.exists(prompt_image_dir):
-                os.makedirs(prompt_image_dir)
-            if not file:
-                modal = PromptModal(interaction, bot)
-                await interaction.response.send_modal(modal)
-            elif file.filename.endswith(".png") or file.filename.endswith(".jpg"):
-                file_path = os.path.join(prompt_image_dir, file.filename)
-                await file.save(file_path)
-                modal = PromptModal(interaction, bot, file.filename)
-                await interaction.response.send_modal(modal)
-            else:
-                await interaction.response.send_message("Please upload a .png or .jpg file.")
-        except Exception as e:
-            await interaction.response.send_message("An error occured. Please try again.")
-            print(f"Error: {e}")
+    guild_id = str(interaction.guild.id)
+    try:
+        os.makedirs(os.path.join(prompt_image_dir, guild_id), exist_ok=True)
+        if not file:
+            modal = PromptModal(interaction, bot)
+            await interaction.response.send_modal(modal)
+        elif file.filename.endswith(".png") or file.filename.endswith(".jpg"):
+            file_path = os.path.join(prompt_image_dir, guild_id, file.filename)
+            await file.save(file_path)
+            modal = PromptModal(interaction, bot, file.filename)
+            await interaction.response.send_modal(modal)
+        else:
+            await interaction.response.send_message("Please upload a .png or .jpg file.")
+    except Exception as e:
+        await interaction.response.send_message("An error occured. Please try again.")
+        print(f"Error: {e}")
 
 
 @bot.tree.command(name="add-to-prompt", description="Adds content to a prompt using a modal UI")
 async def add_to_prompt(interaction: discord.Interaction, file: Optional[discord.Attachment]):
-        try:
-            if not os.path.exists(prompt_image_dir):
-                os.makedirs(prompt_image_dir)
-            if not file:
-                modal = AddToPromptModal(interaction, bot)
-                await interaction.response.send_modal(modal)
-            elif file.filename.endswith(".png") or file.filename.endswith(".jpg"):
-                file_path = os.path.join(prompt_image_dir, file.filename)
-                await file.save(file_path)
-                modal = AddToPromptModal(interaction, bot, file.filename)
-                await interaction.response.send_modal(modal)
-            else:
-                await interaction.response.send_message("Please upload a .png or .jpg file.")
-        except Exception as e:
-            await interaction.response.send_message("An error occured. Please try again.")
-            print(f"Error: {e}")
+    guild_id = str(interaction.guild.id)
+    try:
+        os.makedirs(os.path.join(prompt_image_dir, guild_id), exist_ok=True)
+        if not file:
+            modal = AddToPromptModal(interaction, bot)
+            await interaction.response.send_modal(modal)
+        elif file.filename.endswith(".png") or file.filename.endswith(".jpg"):
+            file_path = os.path.join(prompt_image_dir, guild_id, file.filename)
+            await file.save(file_path)
+            modal = AddToPromptModal(interaction, bot, file.filename)
+            await interaction.response.send_modal(modal)
+        else:
+            await interaction.response.send_message("Please upload a .png or .jpg file.")
+    except Exception as e:
+        await interaction.response.send_message("An error occured. Please try again.")
+        print(f"Error: {e}")
 
 
 @bot.tree.command(name="send-prompt", description="Send a prompt")
 async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
     # Sends the prompt
     prompt_id = prompt_id.strip().upper()
-    guild_id = interaction.guild.id
+    guild_id = str(interaction.guild.id)
     if prompt_id in bot.prompt_info:
         channel = bot.guild.get_channel(int(bot.prompt_info[prompt_id]['channel']))
         log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
@@ -272,8 +274,9 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
                     await message.pin()
                     first_message = False
             if 'image' in bot.prompt_info[prompt_id].keys():
+                os.makedirs(os.path.join(prompt_image_dir, guild_id), exist_ok=True)
                 file_name = bot.prompt_info[prompt_id]['image']
-                file_path = os.path.join(prompt_image_dir, file_name)
+                file_path = os.path.join(prompt_image_dir, guild_id, file_name)
                 await channel.send(file=discord.File(file_path))
             bot.prompt_info = {}
             bot.save()
@@ -291,7 +294,7 @@ async def sendAllPrompts(interaction: discord.Interaction):
     print(len(bot.prompt_info.keys()))
     await interaction.response.send_message(f"There are {len(bot.prompt_info.keys())} prompts saved. Are you sure you want to send all prompts? This will also clear them from the list.", ephemeral=True, view=confirmSend)
     await confirmSend.wait()
-    guild_id = interaction.guild.id
+    guild_id = str(interaction.guild.id)
     prompt_keys = list(bot.prompt_info.keys())
     prompt_mentions = [f"<#{bot.prompt_info[prompt_id]['channel']}>" for prompt_id in bot.prompt_info.keys() if bot.prompt_info[prompt_id]['channel']]
     log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
@@ -320,8 +323,9 @@ async def sendAllPrompts(interaction: discord.Interaction):
                             first_message = False
                     if 'image' in bot.prompt_info[prompt_id].keys():
                         try:
+                            os.makedirs(os.path.join(prompt_image_dir, guild_id), exist_ok=True)
                             file_name = bot.prompt_info[prompt_id]['image']
-                            file_path = os.path.join(prompt_image_dir, file_name)
+                            file_path = os.path.join(prompt_image_dir, guild_id, file_name)
                             await channel.send(file=discord.File(file_path))
                         except discord.Forbidden:
                             print(f"Forbidden to send files to {channel.name}")
