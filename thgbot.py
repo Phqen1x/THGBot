@@ -290,7 +290,6 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
         await interaction.response.send_message("Prompt not found")
 
 @bot.tree.command(name="send-all-prompts", description="Send all prompts")
-@commands.has_role("Admin")
 async def sendAllPrompts(interaction: discord.Interaction):
     # Sends all the prompts
 
@@ -339,8 +338,6 @@ async def sendAllPrompts(interaction: discord.Interaction):
                             print(f"Forbidden to send files to {channel.name}")
                         except discord.HTTPException as e:
                             print(f"HTTP exception while sending message to {channel.name}: {e}")
-                    bot.prompt_info = {}
-                    bot.save()
                     print(f"Sent prompt {prompt_id} to {channel.name}")
                 except discord.Forbidden:
                     await interaction.followup.send(f"The bot doesn't have permission to send files in {channel.name}")
@@ -352,11 +349,12 @@ async def sendAllPrompts(interaction: discord.Interaction):
                 print(f"Channel {channel} does not exist")
         await interaction.followup.send("All prompts have been sent")
         await log_channel.send(embed=log_embed)
+        bot.prompt_info = {}
+        bot.save()
     else:
         await interaction.followup.send("Cancelled sending all prompts!", ephemeral=True)
 
 @bot.tree.command(name="clear-all-prompts", description="Clear all prompts")
-@commands.has_role("Admin")
 async def clearAllPrompts(interaction: discord.Interaction):
     # Clears all the prompts
     try:
