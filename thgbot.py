@@ -347,12 +347,14 @@ async def sendAllPrompts(interaction: discord.Interaction):
             else:
                 await interaction.followup.send(f"Channel {channel} does not exit")
                 print(f"Channel {channel} does not exist")
-        await interaction.followup.send("All prompts have been sent")
+        msg = await interaction.original_response()
+        await msg.edit(content="All prompts sent.")
         await log_channel.send(embed=log_embed)
         bot.prompt_info = {}
         bot.save()
     else:
-        await interaction.followup.send("Cancelled sending all prompts!", ephemeral=True)
+        msg = await interaction.original_response()
+        await msg.edit(content="Cancelled sending all prompts!")
 
 @bot.tree.command(name="clear-all-prompts", description="Clear all prompts")
 async def clearAllPrompts(interaction: discord.Interaction):

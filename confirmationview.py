@@ -17,9 +17,17 @@ class ConfirmationView(discord.ui.View):
     async def send_callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
         self.confirmed = True
+        self.send_button.disabled = True
+        self.cancel_button.disabled = True
+        msg = await interaction.original_response()
+        await interaction.followup.edit_message(msg.id, view=self)
         self.stop()
 
     async def cancel_callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
         self.confirmed = False
+        self.send_button.disabled = True
+        self.cancel_button.disabled = True
+        msg = await interaction.original_response()
+        await interaction.followup.edit_message(msg.id, view=self)
         self.stop()
