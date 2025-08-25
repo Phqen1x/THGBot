@@ -6,8 +6,8 @@ class PromptView(discord.ui.View):
         super().__init__()
         self.channel_select = TributeChannelSelector(channels)
         self.add_item(self.channel_select)
+        self.bot = bot
 
     @property
     def channel_id(self):
         return int(self.channel_select.values[0])
-

@@ -5,7 +5,7 @@ class ConfirmationView(discord.ui.View):
         super().__init__()
         self.confirmed = False
 
-        self.send_button = discord.ui.Button(label="Send", style=discord.ButtonStyle.green)
+        self.send_button = discord.ui.Button(label="Confirm", style=discord.ButtonStyle.green)
         self.send_button.callback = self.send_callback
         self.add_item(self.send_button)
 
