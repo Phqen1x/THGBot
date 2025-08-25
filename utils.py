@@ -8,4 +8,3 @@ def split_message(message: str) -> list[str]:
         message = message[index:]
     messages.append(message)
     return messages
-

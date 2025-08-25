@@ -3,6 +3,7 @@ import discord
 from promptview import PromptView
 import datetime
 import os
+import asyncio
 
 try:
     datadir = os.environ['SNAP_DATA']
@@ -32,41 +33,61 @@ class PromptModal(discord.ui.Modal):
             return
 
     async def on_submit(self, interaction: discord.Interaction):
-        try:
-            prompt_id = self.children[0].value.upper().strip()
-            prompt = self.children[1].value
-            self.bot.prompt_info[prompt_id] = {}
-            if self.file_name:
-                self.bot.prompt_info[prompt_id]['image'] = self.file_name
-            
+        #try:
+        if True:
             view = PromptView(self.channels, self.bot)
             msg = await interaction.response.send_message("Select a channel:", view=view, ephemeral=True)
-            await view.wait()
-            channel_id = view.channel_select.channel_id
+            self.interaction = interaction
+            prompt_id = self.children[0].value.upper().strip()
+            prompt = self.children[1].value
+            async def process_prompt(self, interaction: discord.Interaction):
+                for count in range(0, 30):
+                    if not view.is_finished():
+                        print("sleeping...")
+                        await asyncio.sleep(1)
+                    else:
+                        break
 
-            self.bot.prompt_info[prompt_id]['message'] = prompt
-            self.bot.prompt_info[prompt_id]['channel'] = channel_id
-            log_channel = self.bot.get_channel(self.bot.config[self.guild_id]['log_channel_id'])
-            log_embed = discord.Embed(
-                    title=f"{prompt_id} prompt saved.",
-                    color=discord.Color.blue())
-            log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
-            log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
-            log_embed.timestamp = datetime.datetime.now()
-            if any(channel.id == self.bot.config[self.guild_id]['log_channel_id'] for channel in self.interaction.guild.channels):
-                await log_channel.send(embed=log_embed)
-                messages = split_message(prompt)
-                for message in messages:
-                    await log_channel.send(message)
-                if 'image' in self.bot.prompt_info[prompt_id].keys():
-                    file_name = self.bot.prompt_info[prompt_id]['image']
-                    file_path = os.path.join(prompt_image_dir, self.guild_id, file_name)
-                    await log_channel.send(file=discord.File(file_path))
-            else:
-                print(f"Log channel not found: {self.bot.config[self.guild_id]['log_channel_id']}")
-            await interaction.followup.send(f"Prompt saved with ID {prompt_id}", ephemeral=True)
-        except Exception as e:
-            await interaction.followup.send("An error occurred. Please try again.", ephemeral=True)
-            print(f"Error: {e}")
+                if view.is_finished():
+                    print("is finished")
+                    self.bot.prompt_info[prompt_id] = {}
+
+                    channel_id = view.channel_select.channel_id
+
+                    if self.file_name and channel_id:
+                        self.bot.prompt_info[prompt_id]['image'] = self.file_name
+
+                    self.bot.prompt_info[prompt_id]['message'] = prompt
+                    self.bot.prompt_info[prompt_id]['channel'] = channel_id
+                    log_channel = self.bot.get_channel(self.bot.config[self.guild_id]['log_channel_id'])
+                    log_embed = discord.Embed(
+                        title=f"{prompt_id} prompt saved.",
+                        color=discord.Color.blue())
+                    log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
+                    log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
+                    log_embed.timestamp = datetime.datetime.now()
+                    if any(channel.id == self.bot.config[self.guild_id]['log_channel_id'] for channel in self.interaction.guild.channels):
+                        await log_channel.send(embed=log_embed)
+                        messages = split_message(prompt)
+                        for message in messages:
+                            await log_channel.send(message)
+                        if 'image' in self.bot.prompt_info[prompt_id].keys():
+                            file_name = self.bot.prompt_info[prompt_id]['image']
+                            file_path = os.path.join(prompt_image_dir, self.guild_id, file_name)
+                            await log_channel.send(file=discord.File(file_path))
+                    else:
+                        print(f"Log channel not found: {self.bot.config[self.guild_id]['log_channel_id']}")
+                    view.remove_item(view.channel_select)
+                    msg = await interaction.original_response()
+                    await interaction.followup.edit_message(msg.id, content=f"Prompt saved with ID {prompt_id}", view=view)
+                else:
+                    print("Not finished")
+                    view.remove_item(view.channel_select)
+                    msg = await interaction.original_response()
+                    await interaction.followup.edit_message(msg.id, content="Timed out.", view=view)
+            await process_prompt(self, interaction)
+        #except Exception as e:
+        #    await interaction.followup.send("An error occurred. Please try again.", ephemeral=True)
+        #    print(f"Error: {e}")
         # Saves prompts to json
         self.bot.save()
