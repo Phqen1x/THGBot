@@ -408,7 +408,7 @@ async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
         log_embed.timestamp = datetime.datetime.now()
 
         if confirmSend.confirmed:
-            bot.prompt_info = {}
+            del bot.prompt_info[prompt_id_key]
             bot.save()
             msg = await interaction.original_response()
             await interaction.followup.edit_message(msg.id, content=f"Prompt {prompt_id_key} cleared.", view=confirmSend)
@@ -418,6 +418,6 @@ async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
             await interaction.followup.edit_message(msg.id, content=f"Cancelled clearing the {prompt_id_key} prompt!", view=confirmSend)
     except Exception as e:
         print(e)
-        await interaction.response.send_message(f"Prompt {prompt_id_key} not cleared", ephemeral=True)
+        await interaction.followup.send(f"Prompt {prompt_id_key} not cleared", ephemeral=True)
 
 bot.run(token)
