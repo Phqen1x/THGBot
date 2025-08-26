@@ -282,10 +282,10 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
                     os.unlink(file_path)
                 except FileNotFoundError:
                     pass
+            await interaction.response.send_message(f"Prompt {prompt_id} sent in channel {channel.mention}", ephemeral=True)
+            await log_channel.send(embed=log_embed)
             del bot.prompt_info[prompt_id]
             bot.save()
-            await interaction.response.send_message(f"Prompt {prompt_id} sent in channel {channel.mention}")
-            await log_channel.send(embed=log_embed)
     else:
         await interaction.response.send_message("Prompt not found")
 
@@ -363,15 +363,61 @@ async def clearAllPrompts(interaction: discord.Interaction):
         confirmSend = ConfirmationView()
         await interaction.response.send_message(f"There are {len(bot.prompt_info.keys())} prompts saved. Are you sure you want to delete all prompts?", ephemeral=True, view=confirmSend)
         await confirmSend.wait()
+
+        guild_id = str(interaction.guild.id)
+        prompt_keys = list(bot.prompt_info.keys())
+        prompt_mentions = [f"<#{bot.prompt_info[prompt_id]['channel']}>" for prompt_id in bot.prompt_info.keys() if bot.prompt_info[prompt_id]['channel']]
+        log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
+        log_embed = discord.Embed(
+            title=f"All prompts cleared.",
+            color=discord.Color.red())
+        log_embed.add_field(name="Prompt IDs", value=f"**{"\n".join(prompt_keys)}**", inline=True)
+        log_embed.add_field(name="Prompt channels", value=f"{'\n'.join(prompt_mentions)}", inline=True)
+        log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
+        log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
+        log_embed.timestamp = datetime.datetime.now()
+
         if confirmSend.confirmed:
             bot.prompt_info = {}
             bot.save()
-            await interaction.followup.send("Prompts cleared", ephemeral=True)
+            msg = await interaction.original_response()
+            await interaction.followup.edit_message(msg.id, content="Prompts cleared", view=confirmSend)
+            await log_channel.send(embed=log_embed)
         else:
             await interaction.followup.send("Cancelled clearing all prompts!")
     except Exception as e:
         print(e)
         await interaction.response.send_message("Prompts not cleared", ephemeral=True)
 
+@bot.tree.command(name="clear-prompt", description="Clear a specific prompt")
+async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
+    # Clears a specific prompt
+    try:
+        prompt_id_key = prompt_id.upper().strip()
+        confirmSend = ConfirmationView()
+        await interaction.response.send_message(f"Are you sure you want to delete the {prompt_id_key} prompt?", ephemeral=True, view=confirmSend)
+        await confirmSend.wait()
+
+        guild_id = str(interaction.guild.id)
+        log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
+        log_embed = discord.Embed(
+            title=f"{prompt_id_key} prompt cleared.",
+            color=discord.Color.red())
+        log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
+        log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
+        log_embed.timestamp = datetime.datetime.now()
+
+        if confirmSend.confirmed:
+            bot.prompt_info = {}
+            bot.save()
+            msg = await interaction.original_response()
+            await interaction.followup.edit_message(msg.id, content="Prompts cleared", view=confirmSend)
+            await log_channel.send(embed=log_embed)
+        else:
+            msg = await interaction.original_response()
+            await interaction.followup.edit_message(msg.id, content=f"Cancelled clearing the {prompt_id_key} prompt!", view=confirmSend)
+    except Exception as e:
+        print(e)
+        await interaction.response.send_message(f"Prompt {prompt_id_key} not cleared", ephemeral=True)
 
 bot.run(token)
