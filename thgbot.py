@@ -411,7 +411,7 @@ async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
             bot.prompt_info = {}
             bot.save()
             msg = await interaction.original_response()
-            await interaction.followup.edit_message(msg.id, content="Prompts cleared", view=confirmSend)
+            await interaction.followup.edit_message(msg.id, content=f"Prompt {prompt_id_key} cleared.", view=confirmSend)
             await log_channel.send(embed=log_embed)
         else:
             msg = await interaction.original_response()
