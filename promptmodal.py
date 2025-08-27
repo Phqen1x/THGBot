@@ -4,6 +4,7 @@ from promptview import PromptView
 import datetime
 import os
 import asyncio
+from typing import Optional
 
 try:
     datadir = os.environ['SNAP_DATA']
@@ -13,7 +14,7 @@ except:
 prompt_image_dir = os.path.join(datadir, 'prompt_images')
 
 class PromptModal(discord.ui.Modal):
-    def __init__(self, interaction: discord.Interaction, bot = None, file_name: str = None) -> None:
+    def __init__(self, interaction: discord.Interaction, bot = None, file: Optional[discord.Attachment] = None) -> None:
         super().__init__(title="Prompt Submission")
         self.interaction = interaction
         self.bot = bot
@@ -22,7 +23,7 @@ class PromptModal(discord.ui.Modal):
                          if isinstance(channel, discord.TextChannel) and channel.category_id == self.bot.config[self.guild_id]['category_id']]
         self.add_item(discord.ui.TextInput(label="Prompt ID", placeholder="Enter the prompt id", custom_id="prompt_id"))
         self.add_item(discord.ui.TextInput(label="Prompt", placeholder="Enter your prompt", custom_id="prompt", style=discord.TextStyle.paragraph))
-        self.file_name = file_name
+        self.file = file
 
     async def callback(self, interaction: discord.Interaction):
         prompt_id = self.get_item("prompt_id").value
@@ -54,8 +55,15 @@ class PromptModal(discord.ui.Modal):
 
                     channel_id = view.channel_select.channel_id
 
-                    if self.file_name and channel_id:
-                        self.bot.prompt_info[prompt_id]['image'] = self.file_name
+                    if self.file and channel_id:
+                        if self.file.filename.endswith(".png") or self.file.filename.endswith(".jpg"):
+                            file_dir = os.path.join(prompt_image_dir, self.guild_id)
+                            file_path = os.path.join(file_dir, prompt_id + os.path.splitext(self.file.filename)[1])
+                            os.makedirs(file_dir, exist_ok=True)
+                            await self.file.save(file_path)
+                            self.bot.prompt_info[prompt_id]['image'] = file_path
+                        else:
+                            await interaction.response.send_message("Please upload a .png or .jpg file.")
 
                     self.bot.prompt_info[prompt_id]['message'] = prompt
                     self.bot.prompt_info[prompt_id]['channel'] = channel_id

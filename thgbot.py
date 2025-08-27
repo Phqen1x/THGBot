@@ -202,9 +202,11 @@ async def viewPrompt(interaction:discord.Interaction, prompt_id: str):
                 await interaction.followup.send(msg, ephemeral=True)
             if 'image' in bot.prompt_info[prompt_id].keys():
                 file_name = bot.prompt_info[prompt_id]['image']
-                os.makedirs(os.path.join(prompt_image_dir, guild_id), exist_ok=True)
                 file_path = os.path.join(prompt_image_dir, guild_id, file_name)
-                await interaction.followup.send(file=discord.File(file_path), ephemeral=True)
+                if os.path.exists(file_path):
+                    await interaction.followup.send(file=discord.File(file_path), ephemeral=True)
+                else:
+                    await interaction.followup.send("File is missing.", ephemeral=True)
         else:
             await interaction.response.send_message("Prompt is empty", ephemeral=True)
     else:
@@ -214,17 +216,12 @@ async def viewPrompt(interaction:discord.Interaction, prompt_id: str):
 async def save_prompt(interaction: discord.Interaction, file: Optional[discord.Attachment]):
     guild_id = str(interaction.guild.id)
     try:
-        os.makedirs(os.path.join(prompt_image_dir, guild_id), exist_ok=True)
         if not file:
             modal = PromptModal(interaction, bot)
             await interaction.response.send_modal(modal)
-        elif file.filename.endswith(".png") or file.filename.endswith(".jpg"):
-            file_path = os.path.join(prompt_image_dir, guild_id, file.filename)
-            await file.save(file_path)
-            modal = PromptModal(interaction, bot, file.filename)
-            await interaction.response.send_modal(modal)
         else:
-            await interaction.response.send_message("Please upload a .png or .jpg file.")
+            modal = PromptModal(interaction, bot, file)
+            await interaction.response.send_modal(modal)
     except Exception as e:
         await interaction.response.send_message("An error occured. Please try again.")
         print(f"Error: {e}")
