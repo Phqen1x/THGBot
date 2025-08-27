@@ -72,7 +72,8 @@ class PromptModal(discord.ui.Modal):
                         title=f"{prompt_id} prompt saved.",
                         color=discord.Color.blue())
                     log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
-                    log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
+                    if interaction.guild.icon != None:
+                        log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
                     log_embed.timestamp = datetime.datetime.now()
                     if any(channel.id == self.bot.config[self.guild_id]['log_channel_id'] for channel in self.interaction.guild.channels):
                         await log_channel.send(embed=log_embed)

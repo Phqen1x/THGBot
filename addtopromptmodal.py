@@ -29,8 +29,6 @@ class AddToPromptModal(discord.ui.Modal):
             prompt = self.children[1].value
             if prompt_id not in self.bot.prompt_info.keys():
                 self.bot.prompt_info[prompt_id] = {'message': ''}
-            if self.file_name:
-                self.bot.prompt_info[prompt_id]['image'] = self.file_name
             self.bot.prompt_info[prompt_id]['message'] += prompt
             log_channel = self.bot.get_channel(self.bot.config[self.guild_id]['log_channel_id'])
             log_embed = discord.Embed(
@@ -44,6 +42,7 @@ class AddToPromptModal(discord.ui.Modal):
                 messages = split_message(prompt)
                 for message in messages:
                     await log_channel.send(message)
+                channel_id = self.bot.prompt_info[prompt_id]['channel']
                 if self.file and channel_id:
                     if self.file.filename.endswith(".png") or self.file.filename.endswith(".jpg"):
                         file_dir = os.path.join(prompt_image_dir, self.guild_id)

@@ -82,17 +82,22 @@ async def on_guild_join(guild):
 @bot.tree.command(name='set-log-channel', description='Sets the channel for logs to be sent to')
 async def set_log_channel(interaction: discord.Interaction, channel_id: Optional[str], channel_name: Optional[str]):
     guild_id = str(interaction.guild.id)
-    print(f'channel_id: {channel_id}')
-    print(f'First: {bot.config}')
     if channel_id:
         channel_id = channel_id.strip()
-        print(f'Second: {bot.config}')
         if any(channel.id == int(channel_id) for channel in interaction.guild.channels):
-            print(f'Third: {bot.config}')
             bot.config[guild_id]['log_channel_id'] = int(channel_id)
+            log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
             bot.save()
             try:
                 await interaction.response.send_message(f'Log channel set to <#{bot.config[guild_id]["log_channel_id"]}>', ephemeral=True)
+                log_embed = discord.Embed(
+                        title=f'**Log channel set to <#{bot.config[guild_id]["log_channel_id"]}>**\n',
+                        color=discord.Color.green())
+                log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
+                if interaction.guild.icon != None:
+                    log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
+                log_embed.timestamp = datetime.datetime.now()
+                await log_channel.send(embed=log_embed)
             except Exception as e:
                 await interaction.response.send_message('An error occured. Please try again.')
                 print(f'Exception: {e}')
@@ -107,6 +112,7 @@ async def set_log_channel(interaction: discord.Interaction, channel_id: Optional
         for channel in interaction.guild.channels:
             if channel_name.lower() == channel.name.lower():
                 bot.config[guild_id]['log_channel_id'] = channel.id
+                log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
                 try:
                     await interaction.response.send_message(f'Log channel set to <#{bot.config[guild_id]["log_channel_id"]}>', ephemeral=True)
                 except Exception as e:
@@ -115,12 +121,21 @@ async def set_log_channel(interaction: discord.Interaction, channel_id: Optional
                 bot.save()
                 sent = True
                 break
+        log_embed = discord.Embed(
+                title=f'**Log channel set to <#{bot.config[guild_id]["log_channel_id"]}>**\n',
+                color=discord.Color.green())
+        log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
+        if interaction.guild.icon != None:
+            log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
+        log_embed.timestamp = datetime.datetime.now()
         if not sent:
             try:
                 await interaction.response.send_message('Channel not found', ephemeral=True)
             except Exception as e:
                 await interaction.response.send_message('An error occured. Please try again.')
                 print(f'Exception: {e}')
+        else:
+            await log_channel.send(embed=log_embed)
     else:
         try:
             await interaction.response.send_message('Provide an argument', ephemeral=True)
@@ -136,13 +151,22 @@ async def set_category(interaction: discord.Interaction, category_id: Optional[s
         category_id = category_id.strip()
         if any(category.id == int(category_id) for category in interaction.guild.categories):
             bot.config[guild_id]['category_id'] = int(category_id)
+            log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
             bot.save()
             try:
                 await interaction.response.send_message(f'Prompt category set to <#{bot.config[guild_id]["category_id"]}>', ephemeral=True)
             except Exception as e:
                 await interaction.response.send_message('An error occured. Please try again.')
                 print(f'Exception: {e}')
-
+            if bot.config[guild_id]['log_channel_id']:
+                log_embed = discord.Embed(
+                        title=f"**Prompt category set to <#{bot.config[guild_id]['category_id']}>**\n",
+                        color=discord.Color.green())
+                log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
+                if interaction.guild.icon != None:
+                    log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
+                log_embed.timestamp = datetime.datetime.now()
+                await log_channel.send(embed=log_embed)
         else:
             try:
                 await interaction.response.send_message('Category not found', ephemeral=True)
@@ -154,6 +178,7 @@ async def set_category(interaction: discord.Interaction, category_id: Optional[s
         for category in interaction.guild.categories:
             if category_name.lower() == category.name.lower():
                 bot.config[guild_id]['category_id'] = category.id
+                log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
                 bot.save()
                 try:
                     await interaction.response.send_message(f'Prompt category set to <#{bot.config[guild_id]["category_id"]}>', ephemeral=True)
@@ -162,12 +187,21 @@ async def set_category(interaction: discord.Interaction, category_id: Optional[s
                     print(f'Exception: {e}')
                 sent = True
                 break
+        log_embed = discord.Embed(
+                title=f"**Prompt category set to <#{bot.config[guild_id]['category_id']}>**\n",
+                color=discord.Color.green())
+        log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
+        if interaction.guild.icon != None:
+            log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
+        log_embed.timestamp = datetime.datetime.now()
         if not sent:
             try:
                 await interaction.response.send_message('Category not found', ephemeral=True)
             except Exception as e:
                 await interaction.response.send_message('An error occured. Please try again.')
                 print(f'Exception: {e}')
+        else:
+            await log_channel.send(embed=log_embed)
 
 async def prompt_ids_list(interaction: discord.Interaction):
     if bot.prompt_info:
@@ -238,17 +272,12 @@ async def save_prompt(interaction: discord.Interaction, file: Optional[discord.A
 async def add_to_prompt(interaction: discord.Interaction, file: Optional[discord.Attachment]):
     guild_id = str(interaction.guild.id)
     try:
-        os.makedirs(os.path.join(prompt_image_dir, guild_id), exist_ok=True)
         if not file:
             modal = AddToPromptModal(interaction, bot)
             await interaction.response.send_modal(modal)
-        elif file.filename.endswith(".png") or file.filename.endswith(".jpg"):
-            file_path = os.path.join(prompt_image_dir, guild_id, file.filename)
-            await file.save(file_path)
-            modal = AddToPromptModal(interaction, bot, file.filename)
-            await interaction.response.send_modal(modal)
         else:
-            await interaction.response.send_message("Please upload a .png or .jpg file.")
+            modal = AddToPromptModal(interaction, bot, file)
+            await interaction.response.send_modal(modal)
     except Exception as e:
         await interaction.response.send_message("An error occured. Please try again.")
         print(f"Error: {e}")
@@ -266,7 +295,8 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
                 title=f"{prompt_id} prompt sent to {channel.mention}",
                 color=discord.Color.green())
         log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
-        log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
+        if interaction.guild.icon != None:
+            log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
         log_embed.timestamp = datetime.datetime.now()
         if channel:
             message = bot.prompt_info[prompt_id]['message']
@@ -319,7 +349,8 @@ async def sendAllPrompts(interaction: discord.Interaction):
         log_embed.add_field(name="Prompt IDs", value=f"**{"\n".join(prompt_keys)}**", inline=True)
         log_embed.add_field(name="Prompt channels", value=f"{'\n'.join(prompt_mentions)}", inline=True)
         log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
-        log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
+        if interaction.guild.icon != None:
+            log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
         log_embed.timestamp = datetime.datetime.now()
     else:
         await interaction.followup.send(f"Channel {channel} does not exit")
@@ -341,7 +372,6 @@ async def sendAllPrompts(interaction: discord.Interaction):
                                 first_message = False
                         if 'image' in bot.prompt_info[prompt_id].keys():
                             try:
-                                os.makedirs(os.path.join(prompt_image_dir, guild_id), exist_ok=True)
                                 file_name = bot.prompt_info[prompt_id]['image']
                                 file_path = os.path.join(prompt_image_dir, guild_id, file_name)
                                 await channel.send(file=discord.File(file_path))
@@ -380,24 +410,53 @@ async def clearAllPrompts(interaction: discord.Interaction):
     # Clears all the prompts
     try:
         confirmSend = ConfirmationView()
-        await interaction.response.send_message(f"There are {len(bot.prompt_info.keys())} prompts saved. Are you sure you want to delete all prompts?", ephemeral=True, view=confirmSend)
+        length = 0
+        for prompt_id in bot.prompt_info.keys():
+            if interaction.guild.get_channel(int(bot.prompt_info[prompt_id]['channel'])):
+                length += 1
+        await interaction.response.send_message(f"There are {length} prompts saved. Are you sure you want to delete all prompts?", ephemeral=True, view=confirmSend)
         await confirmSend.wait()
 
+        prompts_to_del = []
         guild_id = str(interaction.guild.id)
-        prompt_keys = list(bot.prompt_info.keys())
-        prompt_mentions = [f"<#{bot.prompt_info[prompt_id]['channel']}>" for prompt_id in bot.prompt_info.keys() if bot.prompt_info[prompt_id]['channel']]
+        prompt_keys = []
+        prompt_mentions = []
+        for prompt_id in bot.prompt_info.keys():
+            if interaction.guild.get_channel(int(bot.prompt_info[prompt_id]['channel'])):
+                prompt_keys.append(prompt_id)
+                prompt_mentions.append(f"<#{bot.prompt_info[prompt_id]['channel']}>")
+ 
         log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
-        log_embed = discord.Embed(
-            title=f"All prompts cleared.",
-            color=discord.Color.red())
-        log_embed.add_field(name="Prompt IDs", value=f"**{"\n".join(prompt_keys)}**", inline=True)
-        log_embed.add_field(name="Prompt channels", value=f"{'\n'.join(prompt_mentions)}", inline=True)
-        log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
-        log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
-        log_embed.timestamp = datetime.datetime.now()
+        if length > 0:
+            log_embed = discord.Embed(
+                title=f"All prompts cleared.",
+                color=discord.Color.red())
+            log_embed.add_field(name="Prompt IDs", value=f"**{"\n".join(prompt_keys)}**", inline=True)
+            log_embed.add_field(name="Prompt channels", value=f"{'\n'.join(prompt_mentions)}", inline=True)
+            log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
+            if interaction.guild.icon != None:
+                log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
+            log_embed.timestamp = datetime.datetime.now()
 
         if confirmSend.confirmed:
-            bot.prompt_info = {}
+            for prompt_id in bot.prompt_info.keys():
+                if interaction.guild.get_channel(int(bot.prompt_info[prompt_id]['channel'])):
+                    prompts_to_del.append(prompt_id)
+
+            for prompt_id in prompts_to_del:
+                if 'image' in bot.prompt_info[prompt_id].keys():
+                    try:
+                        file_name = bot.prompt_info[prompt_id]['image']
+                        file_path = os.path.join(prompt_image_dir, guild_id, file_name)
+                        try:
+                            os.unlink(file_path)
+                        except FileNotFoundError:
+                            pass
+                    except discord.Forbidden:
+                        print(f"Forbidden to send files to {channel.name}")
+                    except discord.HTTPException as e:
+                        print(f"HTTP exception while sending message to {channel.name}: {e}")
+                del bot.prompt_info[prompt_id]
             bot.save()
             msg = await interaction.original_response()
             await interaction.followup.edit_message(msg.id, content="Prompts cleared", view=confirmSend)
@@ -411,32 +470,49 @@ async def clearAllPrompts(interaction: discord.Interaction):
 @bot.tree.command(name="clear-prompt", description="Clear a specific prompt")
 async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
     # Clears a specific prompt
-    try:
+    #try:
+    if True:
         prompt_id_key = prompt_id.upper().strip()
-        confirmSend = ConfirmationView()
-        await interaction.response.send_message(f"Are you sure you want to delete the {prompt_id_key} prompt?", ephemeral=True, view=confirmSend)
-        await confirmSend.wait()
+        if interaction.guild.get_channel(int(bot.prompt_info[prompt_id_key]['channel'])):
+            confirmSend = ConfirmationView()
+            await interaction.response.send_message(f"Are you sure you want to delete the {prompt_id_key} prompt?", ephemeral=True, view=confirmSend)
+            await confirmSend.wait()
 
-        guild_id = str(interaction.guild.id)
-        log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
-        log_embed = discord.Embed(
-            title=f"{prompt_id_key} prompt cleared.",
-            color=discord.Color.red())
-        log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
-        log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
-        log_embed.timestamp = datetime.datetime.now()
+            guild_id = str(interaction.guild.id)
+            log_channel = bot.get_channel(bot.config[guild_id]['log_channel_id'])
+            log_embed = discord.Embed(
+                title=f"{prompt_id_key} prompt cleared.",
+                color=discord.Color.red())
+            log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
+            if interaction.guild.icon != None:
+                log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
+            log_embed.timestamp = datetime.datetime.now()
 
-        if confirmSend.confirmed:
-            del bot.prompt_info[prompt_id_key]
-            bot.save()
-            msg = await interaction.original_response()
-            await interaction.followup.edit_message(msg.id, content=f"Prompt {prompt_id_key} cleared.", view=confirmSend)
-            await log_channel.send(embed=log_embed)
+            if confirmSend.confirmed:
+                if 'image' in bot.prompt_info[prompt_id_key].keys():
+                    try:
+                        file_name = bot.prompt_info[prompt_id_key]['image']
+                        file_path = os.path.join(prompt_image_dir, guild_id, file_name)
+                        try:
+                            os.unlink(file_path)
+                        except FileNotFoundError:
+                            pass
+                    except discord.Forbidden:
+                        print(f"Forbidden to send files to {channel.name}")
+                    except discord.HTTPException as e:
+                        print(f"HTTP exception while sending message to {channel.name}: {e}")
+                del bot.prompt_info[prompt_id_key]
+                bot.save()
+                msg = await interaction.original_response()
+                await interaction.followup.edit_message(msg.id, content=f"Prompt {prompt_id_key} cleared.", view=confirmSend)
+                await log_channel.send(embed=log_embed)
+            else:
+                msg = await interaction.original_response()
+                await interaction.followup.edit_message(msg.id, content=f"Cancelled clearing the {prompt_id_key} prompt!", view=confirmSend)
         else:
-            msg = await interaction.original_response()
-            await interaction.followup.edit_message(msg.id, content=f"Cancelled clearing the {prompt_id_key} prompt!", view=confirmSend)
-    except Exception as e:
-        print(e)
-        await interaction.followup.send(f"Prompt {prompt_id_key} not cleared", ephemeral=True)
+            await interaction.response.send_message("This prompt was not found in your server.", ephemeral=True)
+    #except Exception as e:
+    #    print(e)
+    #    await interaction.response.send_message(f"Prompt {prompt_id_key} not cleared", ephemeral=True)
 
 bot.run(token)
