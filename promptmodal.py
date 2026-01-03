@@ -20,10 +20,11 @@ class PromptModal(discord.ui.Modal):
         self.bot = bot
         self.guild_id = str(interaction.guild.id)
         self.channels = [channel for channel in interaction.guild.channels 
-                         if isinstance(channel, discord.TextChannel) and channel.category_id == self.bot.config[self.guild_id]['category_id']]
+                         if isinstance(channel, discord.TextChannel) and channel.category_id == self.bot.config[self.guild_id]['category_id'] and "district-" in channel.name]
         self.add_item(discord.ui.TextInput(label="Prompt ID", placeholder="Enter the prompt id", custom_id="prompt_id"))
         self.add_item(discord.ui.TextInput(label="Prompt", placeholder="Enter your prompt", custom_id="prompt", style=discord.TextStyle.paragraph))
         self.file = file
+        print(f"Found {len(self.channels)} channels in category {self.bot.config[self.guild_id]['category_id']}")
 
     async def callback(self, interaction: discord.Interaction):
         prompt_id = self.get_item("prompt_id").value
@@ -35,6 +36,10 @@ class PromptModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         #try:
+        if not self.channels:
+            await interaction.response.send_message("No valid channels found in the configured category. Please contact Phoenix.", ephemeral=True)
+            return
+
         if True:
             view = PromptView(self.channels, self.bot)
             msg = await interaction.response.send_message("Select a channel:", view=view, ephemeral=True)

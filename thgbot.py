@@ -66,6 +66,7 @@ class THGBot(commands.Bot):
 
     async def on_ready(self):
         await bot.tree.sync()
+        self.save()
         print(f"Logged in as {self.user}")
 
 intents = discord.Intents.default()
