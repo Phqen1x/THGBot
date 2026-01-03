@@ -21,6 +21,7 @@ class PromptModal(discord.ui.Modal):
         self.guild_id = str(interaction.guild.id)
         self.channels = [channel for channel in interaction.guild.channels 
                          if isinstance(channel, discord.TextChannel) and channel.category_id == self.bot.config[self.guild_id]['category_id'] and "district-" in channel.name]
+        self.channels.sort(key=lambda ch: ch.position)
         self.add_item(discord.ui.TextInput(label="Prompt ID", placeholder="Enter the prompt id", custom_id="prompt_id"))
         self.add_item(discord.ui.TextInput(label="Prompt", placeholder="Enter your prompt", custom_id="prompt", style=discord.TextStyle.paragraph))
         self.file = file
