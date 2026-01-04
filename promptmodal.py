@@ -25,7 +25,6 @@ class PromptModal(discord.ui.Modal):
         self.add_item(discord.ui.TextInput(label="Prompt ID", placeholder="Enter the prompt id", custom_id="prompt_id"))
         self.add_item(discord.ui.TextInput(label="Prompt", placeholder="Enter your prompt", custom_id="prompt", style=discord.TextStyle.paragraph))
         self.file = file
-        print(f"Found {len(self.channels)} channels in category {self.bot.config[self.guild_id]['category_id']}")
 
     async def callback(self, interaction: discord.Interaction):
         prompt_id = self.get_item("prompt_id").value
@@ -62,7 +61,7 @@ class PromptModal(discord.ui.Modal):
                     channel_id = view.channel_select.channel_id
 
                     if self.file and channel_id:
-                        if self.file.filename.endswith(".png") or self.file.filename.endswith(".jpg"):
+                        if self.file.filename.lower().endswith(".png") or self.file.filename.lower().endswith(".jpg") or self.file.filename.lower().endswith(".jpeg") or self.file.filename.lower().endswith(".webp"):
                             file_dir = os.path.join(prompt_image_dir, self.guild_id)
                             file_path = os.path.join(file_dir, prompt_id + os.path.splitext(self.file.filename)[1])
                             os.makedirs(file_dir, exist_ok=True)
