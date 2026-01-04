@@ -94,6 +94,7 @@ async def set_log_channel(
     channel_name: Optional[str],
 ):
     guild_id = str(interaction.guild.id)
+    # Allows setting of log channel by channel id
     if channel_id:
         channel_id = channel_id.strip()
         if any(channel.id == int(channel_id) for channel in interaction.guild.channels):
@@ -132,6 +133,7 @@ async def set_log_channel(
                     "An error occured. Please try again."
                 )
                 print(f"Exception: {e}")
+    # Allows setting of log channel by channel name
     elif channel_name:
         channel_name = channel_name.strip()
         for channel in interaction.guild.channels:
@@ -195,6 +197,7 @@ async def set_category(
 ):
     guild_id = str(interaction.guild.id)
     sent = False
+    # Allows setting of category by category id
     if category_id:
         category_id = category_id.strip()
         if any(
@@ -236,6 +239,7 @@ async def set_category(
                     "An error occured. Please try again."
                 )
                 print(f"Exception: {e}")
+    # Allows setting of category by category name
     elif category_name:
         category_name = category_name.strip()
         for category in interaction.guild.categories:
@@ -638,68 +642,61 @@ async def clearAllPrompts(interaction: discord.Interaction):
 @bot.tree.command(name="clear-prompt", description="Clear a specific prompt")
 async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
     # Clears a specific prompt
-    # try:
-    if True:
-        prompt_id_key = prompt_id.upper().strip()
-        if interaction.guild.get_channel(
-            int(bot.prompt_info[prompt_id_key]["channel"])
-        ):
-            confirmSend = ConfirmationView()
-            await interaction.response.send_message(
-                f"Are you sure you want to delete the {prompt_id_key} prompt?",
-                ephemeral=True,
+    prompt_id_key = prompt_id.upper().strip()
+    if interaction.guild.get_channel(int(bot.prompt_info[prompt_id_key]["channel"])):
+        confirmSend = ConfirmationView()
+        await interaction.response.send_message(
+            f"Are you sure you want to delete the {prompt_id_key} prompt?",
+            ephemeral=True,
+            view=confirmSend,
+        )
+        await confirmSend.wait()
+
+        guild_id = str(interaction.guild.id)
+        log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
+        log_embed = discord.Embed(
+            title=f"{prompt_id_key} prompt cleared.", color=discord.Color.red()
+        )
+        log_embed.set_author(
+            name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}"
+        )
+        if interaction.guild.icon != None:
+            log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
+        log_embed.timestamp = datetime.datetime.now()
+
+        if confirmSend.confirmed:
+            if "image" in bot.prompt_info[prompt_id_key].keys():
+                try:
+                    file_name = bot.prompt_info[prompt_id_key]["image"]
+                    file_path = os.path.join(prompt_image_dir, guild_id, file_name)
+                    try:
+                        os.unlink(file_path)
+                    except FileNotFoundError:
+                        pass
+                except discord.Forbidden:
+                    print(f"Forbidden to send files to {channel.name}")
+                except discord.HTTPException as e:
+                    print(
+                        f"HTTP exception while sending message to {channel.name}: {e}"
+                    )
+            del bot.prompt_info[prompt_id_key]
+            bot.save()
+            msg = await interaction.original_response()
+            await interaction.followup.edit_message(
+                msg.id, content=f"Prompt {prompt_id_key} cleared.", view=confirmSend
+            )
+            await log_channel.send(embed=log_embed)
+        else:
+            msg = await interaction.original_response()
+            await interaction.followup.edit_message(
+                msg.id,
+                content=f"Cancelled clearing the {prompt_id_key} prompt!",
                 view=confirmSend,
             )
-            await confirmSend.wait()
-
-            guild_id = str(interaction.guild.id)
-            log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
-            log_embed = discord.Embed(
-                title=f"{prompt_id_key} prompt cleared.", color=discord.Color.red()
-            )
-            log_embed.set_author(
-                name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}"
-            )
-            if interaction.guild.icon != None:
-                log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
-            log_embed.timestamp = datetime.datetime.now()
-
-            if confirmSend.confirmed:
-                if "image" in bot.prompt_info[prompt_id_key].keys():
-                    try:
-                        file_name = bot.prompt_info[prompt_id_key]["image"]
-                        file_path = os.path.join(prompt_image_dir, guild_id, file_name)
-                        try:
-                            os.unlink(file_path)
-                        except FileNotFoundError:
-                            pass
-                    except discord.Forbidden:
-                        print(f"Forbidden to send files to {channel.name}")
-                    except discord.HTTPException as e:
-                        print(
-                            f"HTTP exception while sending message to {channel.name}: {e}"
-                        )
-                del bot.prompt_info[prompt_id_key]
-                bot.save()
-                msg = await interaction.original_response()
-                await interaction.followup.edit_message(
-                    msg.id, content=f"Prompt {prompt_id_key} cleared.", view=confirmSend
-                )
-                await log_channel.send(embed=log_embed)
-            else:
-                msg = await interaction.original_response()
-                await interaction.followup.edit_message(
-                    msg.id,
-                    content=f"Cancelled clearing the {prompt_id_key} prompt!",
-                    view=confirmSend,
-                )
-        else:
-            await interaction.response.send_message(
-                "This prompt was not found in your server.", ephemeral=True
-            )
-    # except Exception as e:
-    #    print(e)
-    #    await interaction.response.send_message(f"Prompt {prompt_id_key} not cleared", ephemeral=True)
+    else:
+        await interaction.response.send_message(
+            "This prompt was not found in your server.", ephemeral=True
+        )
 
 
 bot.run(token)

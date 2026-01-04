@@ -14,6 +14,8 @@ except:
 prompt_image_dir = os.path.join(datadir, "prompt_images")
 
 
+# Implements discord modal dialog
+# Contains prompt_id and prompt variables and saves them to json
 class PromptModal(discord.ui.Modal):
     def __init__(
         self,
@@ -32,7 +34,9 @@ class PromptModal(discord.ui.Modal):
             and channel.category_id == self.bot.config[self.guild_id]["category_id"]
             and "district-" in channel.name
         ]
+        # Sorts channels in the view to be more readable
         self.channels.sort(key=lambda ch: ch.position)
+        # Adds the prompt_id variable
         self.add_item(
             discord.ui.TextInput(
                 label="Prompt ID",
@@ -40,6 +44,7 @@ class PromptModal(discord.ui.Modal):
                 custom_id="prompt_id",
             )
         )
+        # Adds the prompt variable
         self.add_item(
             discord.ui.TextInput(
                 label="Prompt",
@@ -71,6 +76,7 @@ class PromptModal(discord.ui.Modal):
         prompt_id = self.children[0].value.upper().strip()
         prompt = self.children[1].value
         self.bot.prompt_info[prompt_id] = {}
+        # Saves files to prompt_image_dir if submitted
         if self.file:
             file_dir = os.path.join(prompt_image_dir, self.guild_id)
             file_path = os.path.join(
@@ -85,6 +91,7 @@ class PromptModal(discord.ui.Modal):
         )
         self.interaction = interaction
 
+        # Checks if the channel selector has been responded to and sends log message
         async def process_prompt(self, interaction: discord.Interaction):
             for count in range(0, 30):
                 if not view.is_finished():
