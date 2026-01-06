@@ -13,7 +13,7 @@ import datetime
 import json
 
 try:
-    datadir = os.environ["SNAP_DATA"]
+    datadir = os.environ["SNAP_DATA"].replace(os.environ["SNAP_REVISION"], "current")
 except:
     print("SNAP_DATA must be set")
 
@@ -328,7 +328,7 @@ async def view_prompt_ids(interaction: discord.Interaction):
 
 @bot.tree.command(name="view-prompt", description="View a prompt")
 async def viewPrompt(interaction: discord.Interaction, prompt_id: str):
-    prompt_id = prompt_id.upper().strip()
+    prompt_id = prompt_id.upper().strip().replace(" ", "_")
     guild_id = str(interaction.guild.id)
     if prompt_id in bot.prompt_info.keys() and interaction.guild.get_channel(
         int(bot.prompt_info[prompt_id]["channel"])
@@ -642,7 +642,7 @@ async def clearAllPrompts(interaction: discord.Interaction):
 @bot.tree.command(name="clear-prompt", description="Clear a specific prompt")
 async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
     # Clears a specific prompt
-    prompt_id_key = prompt_id.upper().strip()
+    prompt_id_key = prompt_id.upper().strip().replace(" ", "_")
     if prompt_id_key in bot.prompt_info.keys():
         confirmSend = ConfirmationView()
         await interaction.response.send_message(
