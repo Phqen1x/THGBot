@@ -643,7 +643,7 @@ async def clearAllPrompts(interaction: discord.Interaction):
 async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
     # Clears a specific prompt
     prompt_id_key = prompt_id.upper().strip()
-    if interaction.guild.get_channel(int(bot.prompt_info[prompt_id_key]["channel"])):
+    if prompt_id_key in bot.prompt_info.keys():
         confirmSend = ConfirmationView()
         await interaction.response.send_message(
             f"Are you sure you want to delete the {prompt_id_key} prompt?",

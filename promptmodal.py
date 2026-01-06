@@ -105,6 +105,20 @@ class PromptModal(discord.ui.Modal):
 
                 channel_id = view.channel_select.channel_id
 
+                # Prompts were being made with no prompt message or channel id
+                # this is just to ensure this does not happen and cause issues.
+                if not prompt or not channel_id:
+                    view.remove_item(view.channel_select)
+                    msg = await interaction.original_response()
+                    print(
+                        f"ERROR: process_prompt prompt:{prompt}"
+                        f"channel_id:{channel_id}"
+                    )
+                    await interaction.followup.edit_message(
+                        msg.id, content="Channel or prompt does not exist", view=view
+                    )
+                    return
+
                 self.bot.prompt_info[prompt_id]["message"] = prompt
                 self.bot.prompt_info[prompt_id]["channel"] = channel_id
                 log_channel = self.bot.get_channel(
@@ -150,6 +164,7 @@ class PromptModal(discord.ui.Modal):
                 await interaction.followup.edit_message(
                     msg.id, content="Timed out.", view=view
                 )
+                del self.bot.prompt_info[prompt_id]
 
         await process_prompt(self, interaction)
         self.bot.save()
