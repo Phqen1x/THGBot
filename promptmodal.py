@@ -73,7 +73,7 @@ class PromptModal(discord.ui.Modal):
             )
             return
 
-        prompt_id = self.children[0].value.upper().strip()
+        prompt_id = self.children[0].value.upper().strip().replace(" ", "_")
         prompt = self.children[1].value
         self.bot.prompt_info[prompt_id] = {}
         # Saves files to prompt_image_dir if submitted

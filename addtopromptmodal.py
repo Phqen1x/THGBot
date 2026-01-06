@@ -48,7 +48,7 @@ class AddToPromptModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            prompt_id = self.children[0].value.upper().strip()
+            prompt_id = self.children[0].value.upper().strip().replace(" ", "_")
             prompt = self.children[1].value
             if prompt_id not in self.bot.prompt_info.keys():
                 self.bot.prompt_info[prompt_id] = {"message": ""}
