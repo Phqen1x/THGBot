@@ -75,9 +75,14 @@ class AddToPromptModal(discord.ui.Modal):
                     await log_channel.send(message)
                 channel_id = self.bot.prompt_info[prompt_id]["channel"]
                 if self.file and channel_id:
-                    if self.file.filename.endswith(
-                        ".png"
-                    ) or self.file.filename.endswith(".jpg"):
+                    if (
+                        self.file.filename.lower().endswith(".png")
+                        or self.file.filename.lower().endswith(".jpg")
+                        or self.file.filename.lower().endswith(".jpeg")
+                        or self.file.filename.lower().endswith(".webm")
+                        or self.file.filename.lower().endswith(".webp")
+                        or self.file.filename.lower().endswith(".mp3")
+                    ):
                         file_dir = os.path.join(prompt_image_dir, self.guild_id)
                         file_path = os.path.join(
                             file_dir,
@@ -89,7 +94,8 @@ class AddToPromptModal(discord.ui.Modal):
                         await log_channel.send(file=discord.File(file_path))
                     else:
                         await interaction.response.send_message(
-                            "Please upload a .png or .jpg file."
+                            "Please upload a .png, .jpg, .jpeg, .webm, .webp, or .mp3 file.",
+                            ephemeral=True,
                         )
             else:
                 print(f"Log channel not found: {log_channel_id}")

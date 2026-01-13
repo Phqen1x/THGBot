@@ -76,6 +76,15 @@ class PromptModal(discord.ui.Modal):
         prompt_id = self.children[0].value.upper().strip().replace(" ", "_")
         prompt = self.children[1].value
         self.bot.prompt_info[prompt_id] = {}
+
+        if len(prompt_id) > 5 or not prompt_id[1].isdigit():
+            await interaction.response.send_message(
+                f"{prompt_id} is not written in the correct format. e.g. D1F, D1M",
+                ephemeral=True,
+            )
+            del self.bot.prompt_info[prompt_id]
+            self.bot.save()
+            return
         # Saves files to prompt_image_dir if submitted
         if self.file:
             file_dir = os.path.join(prompt_image_dir, self.guild_id)

@@ -11,6 +11,8 @@ import sys
 from typing import Optional
 import datetime
 import json
+import asyncio
+import re
 
 try:
     datadir = os.environ["SNAP_DATA"].replace(os.environ["SNAP_REVISION"], "current")
@@ -283,19 +285,38 @@ async def set_category(
             await log_channel.send(embed=log_embed)
 
 
-async def prompt_ids_list(interaction: discord.Interaction):
+async def prompt_ids_list(
+    interaction: discord.Interaction, embed_title: str, send_to: Optional[int]
+):
     if bot.prompt_info:
+        guild_id = str(interaction.guild.id)
         prompt_keys = []
         prompt_mentions = []
+        channels = []
         for prompt_id in bot.prompt_info.keys():
             if interaction.guild.get_channel(
                 int(bot.prompt_info[prompt_id]["channel"])
             ):
                 prompt_keys.append(prompt_id)
-                prompt_mentions.append(f"<#{bot.prompt_info[prompt_id]['channel']}>")
+                prompt_mentions.append(bot.prompt_info[prompt_id]["channel"])
+                channels.append(
+                    interaction.guild.get_channel(
+                        int(bot.prompt_info[prompt_id]["channel"])
+                    )
+                )
         id_list_embed = discord.Embed(
-            title=f"**Prompts**\n", color=discord.Color.green()
+            title=f"**{embed_title}**\n", color=discord.Color.green()
         )
+        # Sorts channels in the view to be more readable
+        prompt_keys = sorted(
+            prompt_keys,
+            key=lambda x: (
+                (int(re.search(r"\d+", x).group()), x[-1])
+                if re.search(r"\d+", x)
+                else (float("inf"), x)
+            ),
+        )
+        prompt_mentions = sorted(channels, key=lambda ch: ch.position)
         if len(prompt_keys) > 0:
             id_list_embed.add_field(
                 name="**Prompt IDs**",
@@ -304,7 +325,7 @@ async def prompt_ids_list(interaction: discord.Interaction):
             )
             id_list_embed.add_field(
                 name="**Prompt channels**",
-                value=f"{'\n'.join(prompt_mentions)}",
+                value=f"{'\n'.join(ch.mention for ch in channels)}",
                 inline=True,
             )
             id_list_embed.set_author(
@@ -312,7 +333,22 @@ async def prompt_ids_list(interaction: discord.Interaction):
             )
             id_list_embed.set_thumbnail(url=f"{interaction.user.avatar}")
             id_list_embed.timestamp = datetime.datetime.now()
-            await interaction.response.send_message(embed=id_list_embed, ephemeral=True)
+            if send_to == bot.config[guild_id]["log_channel_id"]:
+                if interaction.response.is_done():
+                    await interaction.guild.get_channel(send_to).send(
+                        embed=id_list_embed
+                    )
+                else:
+                    await interaction.guild.get_channel(send_to).send(
+                        embed=id_list_embed
+                    )
+            else:
+                if interaction.response.is_done():
+                    await interaction.followup.send(embed=id_list_embed, ephemeral=True)
+                else:
+                    await interaction.response.send_message(
+                        embed=id_list_embed, ephemeral=True
+                    )
         else:
             await interaction.response.send_message(
                 "No prompts found in guild.", ephemeral=True
@@ -323,7 +359,7 @@ async def prompt_ids_list(interaction: discord.Interaction):
 
 @bot.tree.command(name="view-prompt-ids", description="Lists all prompt_ids")
 async def view_prompt_ids(interaction: discord.Interaction):
-    await prompt_ids_list(interaction)
+    await prompt_ids_list(interaction, "Prompts", None)
 
 
 @bot.tree.command(name="view-prompt", description="View a prompt")
@@ -369,6 +405,7 @@ async def save_prompt(
             or file.filename.lower().endswith(".jpeg")
             or file.filename.lower().endswith(".webp")
             or file.filename.lower().endswith(".webm")
+            or file.filename.lower().endswith(".mp3")
         ):
             modal = PromptModal(interaction, bot, file)
             await interaction.response.send_modal(modal)
@@ -432,7 +469,24 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
                 if first_message:
                     await message.pin()
                     first_message = False
+                    async for message in channel.history(limit=3):
+                        if message.type == discord.MessageType.pins_add:
+                            # Get the audit log to see who pinned
+                            async for entry in message.guild.audit_logs(
+                                limit=1, action=discord.AuditLogAction.message_pin
+                            ):
+                                if entry.user.id == bot.user.id:
+                                    await message.delete()
+                                    break
+                            break
+
             if "image" in bot.prompt_info[prompt_id].keys():
+                if isinstance(bot.prompt_info[prompt_id]["image"], str):
+                    image_files = [bot.prompt_info[prompt_id]["image"]]
+                else:
+                    image_files = bot.prompt_info[prompt_id]["image"]
+                for file_name in image_files:
+                    file_path = os.path.join(prompt_image_dir, guild_id, file_name)
                 os.makedirs(os.path.join(prompt_image_dir, guild_id), exist_ok=True)
                 file_name = bot.prompt_info[prompt_id]["image"]
                 file_path = os.path.join(prompt_image_dir, guild_id, file_name)
@@ -469,13 +523,12 @@ async def sendAllPrompts(interaction: discord.Interaction):
     guild_id = str(interaction.guild.id)
     prompt_keys = []
     prompt_mentions = []
+    log_channel = bot.config[guild_id]["log_channel_id"]
     for prompt_id in bot.prompt_info.keys():
         if interaction.guild.get_channel(int(bot.prompt_info[prompt_id]["channel"])):
             prompt_keys.append(prompt_id)
             prompt_mentions.append(f"<#{bot.prompt_info[prompt_id]['channel']}>")
-    log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
-    if len(prompt_keys) > 0:
-        log_embed = discord.Embed(
+        """log_embed = discord.Embed(
             title=f"All prompts sent.", color=discord.Color.green()
         )
         log_embed.add_field(
@@ -489,9 +542,7 @@ async def sendAllPrompts(interaction: discord.Interaction):
         )
         if interaction.guild.icon != None:
             log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
-        log_embed.timestamp = datetime.datetime.now()
-    else:
-        await interaction.followup.send(f"Channel {channel} does not exit")
+        log_embed.timestamp = datetime.datetime.now()"""
 
     if confirmSend.confirmed:
         for prompt_id in bot.prompt_info.keys():
@@ -510,6 +561,17 @@ async def sendAllPrompts(interaction: discord.Interaction):
                             if first_message:
                                 await pin_message.pin()
                                 first_message = False
+                                async for message in channel.history(limit=3):
+                                    if message.type == discord.MessageType.pins_add:
+                                        # Get the audit log to see who pinned
+                                        async for entry in message.guild.audit_logs(
+                                            limit=1,
+                                            action=discord.AuditLogAction.message_pin,
+                                        ):
+                                            if entry.user.id == bot.user.id:
+                                                await message.delete()
+                                                break
+                                        break
                         if "image" in bot.prompt_info[prompt_id].keys():
                             try:
                                 file_name = bot.prompt_info[prompt_id]["image"]
@@ -542,12 +604,14 @@ async def sendAllPrompts(interaction: discord.Interaction):
                     print(f"Channel {channel} does not exist")
                 prompts_to_del.append(prompt_id)
 
+        if len(prompt_keys) > 0:
+            await prompt_ids_list(interaction, "All prompts sent", log_channel)
+
         for prompt_id in prompts_to_del:
             del bot.prompt_info[prompt_id]
 
         msg = await interaction.original_response()
         await msg.edit(content="All prompts sent.")
-        await log_channel.send(embed=log_embed)
         bot.save()
     else:
         msg = await interaction.original_response()
@@ -697,6 +761,112 @@ async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
         await interaction.response.send_message(
             "This prompt was not found in your server.", ephemeral=True
         )
+
+
+"""@bot.tree.command(name="add-file", description="Add a file to a specific prompt.")
+async def add_file(
+    interaction: discord.Interaction, prompt_id: str, file: discord.Attachment
+):
+    # Add a file to an existing prompt without overwriting
+
+    await interaction.response.defer(ephemeral=True)
+
+    guild_id = str(interaction.guild.id)
+    prompt_id = prompt_id.upper().strip()
+
+    # Check if prompt exists
+    if prompt_id not in bot.prompt_info:
+        await interaction.followup.send(
+            f"Prompt ID `{prompt_id}` not found. Please create the prompt first.",
+            ephemeral=True,
+        )
+        return
+
+    # Validate file type
+    if not (
+        file.filename.endswith(".png")
+        or file.filename.endswith(".jpg")
+        or file.filename.endswith(".jpeg")
+        or file.filename.endswith(".webp")
+        or file.filename.endswith(".webm")
+        or file.filename.endswitch(".mp3")
+    ):
+        await interaction.followup.send(
+            "Please upload a .png, .jpeg, .jpg, .webm, .webp, or .mp3 file.",
+            ephemeral=True,
+        )
+        return
+
+    # Prepare file directory
+    file_dir = os.path.join(prompt_image_dir, guild_id)
+    os.makedirs(file_dir, exist_ok=True)
+
+    # Handle multiple files by using a list or numbering system
+    if "image" in bot.prompt_info[prompt_id]:
+        # If there's already an image, convert to list format
+        existing_image = bot.prompt_info[prompt_id]["image"]
+
+        # Check if it's already a list
+        if isinstance(existing_image, list):
+            images = existing_image
+        else:
+            # Convert single image to list
+            images = [existing_image]
+
+        # Generate unique filename
+        file_extension = os.path.splitext(file.filename)[1]
+        file_number = len(images) + 1
+        new_filename = f"{prompt_id}_{file_number}{file_extension}"
+        file_path = os.path.join(file_dir, new_filename)
+
+        # Save the file
+        await file.save(file_path)
+
+        # Add to list
+        images.append(new_filename)
+        bot.prompt_info[prompt_id]["image"] = images
+    else:
+        # First image for this prompt
+        file_extension = os.path.splitext(file.filename)[1]
+        new_filename = f"{prompt_id}{file_extension}"
+        file_path = os.path.join(file_dir, new_filename)
+
+        # Save the file
+        await file.save(file_path)
+        bot.prompt_info[prompt_id]["image"] = new_filename
+
+    # Save to persistent storage
+    bot.save()
+
+    # Log to log channel
+    if "log_channel_id" in bot.config[guild_id]:
+        log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
+        if log_channel:
+            log_embed = discord.Embed(
+                title=f"File added to {prompt_id}",
+                description=f"Added: `{new_filename if 'new_filename' in locals() else file.filename}`",
+                color=discord.Color.green(),
+            )
+            log_embed.set_author(
+                name=interaction.user.name,
+                icon_url=(
+                    interaction.user.avatar.url if interaction.user.avatar else None
+                ),
+            )
+            log_embed.timestamp = discord.utils.utcnow()
+            await log_channel.send(embed=log_embed)
+            await log_channel.send(file=await file.to_file())
+
+    # Confirm to user
+    image_count = (
+        len(bot.prompt_info[prompt_id]["image"])
+        if isinstance(bot.prompt_info[prompt_id].get("image"), list)
+        else 1
+    )
+    await interaction.followup.send(
+        f"✅ File added to prompt `{prompt_id}`. This prompt now has {image_count} image(s).",
+        ephemeral=True,
+    )"""
 
 
 bot.run(token)
