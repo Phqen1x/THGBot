@@ -13,12 +13,7 @@ prompt_image_dir = os.path.join(datadir, "prompt_images")
 
 
 class AddToPromptModal(discord.ui.Modal):
-    def __init__(
-        self,
-        interaction: discord.Interaction,
-        bot=None,
-        file: Optional[discord.Attachment] = None,
-    ) -> None:
+    def __init__(self, interaction: discord.Interaction, bot=None):
         super().__init__(title="Prompt Addendum")
         self.interaction = interaction
         self.bot = bot
@@ -44,7 +39,6 @@ class AddToPromptModal(discord.ui.Modal):
                 style=discord.TextStyle.paragraph,
             )
         )
-        self.file = file
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -74,7 +68,7 @@ class AddToPromptModal(discord.ui.Modal):
                 for message in messages:
                     await log_channel.send(message)
                 channel_id = self.bot.prompt_info[prompt_id]["channel"]
-                if self.file and channel_id:
+                """if self.file and channel_id:
                     if (
                         self.file.filename.lower().endswith(".png")
                         or self.file.filename.lower().endswith(".jpg")
@@ -96,7 +90,7 @@ class AddToPromptModal(discord.ui.Modal):
                         await interaction.response.send_message(
                             "Please upload a .png, .jpg, .jpeg, .webm, .webp, or .mp3 file.",
                             ephemeral=True,
-                        )
+                        )"""
             else:
                 print(f"Log channel not found: {log_channel_id}")
             await interaction.response.send_message(

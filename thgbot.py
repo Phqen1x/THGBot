@@ -316,7 +316,7 @@ async def prompt_ids_list(
                 else (float("inf"), x)
             ),
         )
-        prompt_mentions = sorted(channels, key=lambda ch: ch.position)
+        channels = sorted(channels, key=lambda ch: ch.position)
         if len(prompt_keys) > 0:
             id_list_embed.add_field(
                 name="**Prompt IDs**",
@@ -376,14 +376,30 @@ async def viewPrompt(interaction: discord.Interaction, prompt_id: str):
             for msg in messages[1:]:
                 await interaction.followup.send(msg, ephemeral=True)
             if "image" in bot.prompt_info[prompt_id].keys():
-                file_name = bot.prompt_info[prompt_id]["image"]
-                file_path = os.path.join(prompt_image_dir, guild_id, file_name)
-                if os.path.exists(file_path):
-                    await interaction.followup.send(
-                        file=discord.File(file_path), ephemeral=True
-                    )
+                if isinstance(bot.prompt_info[prompt_id]["image"], list):
+                    for image in bot.prompt_info[prompt_id]["image"]:
+                        file_name = image
+                        file_path = os.path.join(prompt_image_dir, guild_id, file_name)
+                        if os.path.exists(file_path):
+                            await interaction.followup.send(
+                                file=discord.File(file_path), ephemeral=True
+                            )
+                        else:
+                            await interaction.followup.send(
+                                "File is missing, please reattach the file.",
+                                ephemeral=True,
+                            )
                 else:
-                    await interaction.followup.send("File is missing.", ephemeral=True)
+                    file_name = bot.prompt_info[prompt_id]["image"]
+                    file_path = os.path.join(prompt_image_dir, guild_id, file_name)
+                    if os.path.exists(file_path):
+                        await interaction.followup.send(
+                            file=discord.File(file_path), ephemeral=True
+                        )
+                    else:
+                        await interaction.followup.send(
+                            "File is missing, please reattach the file.", ephemeral=True
+                        )
         else:
             await interaction.response.send_message("Prompt is empty", ephemeral=True)
     else:
@@ -422,17 +438,11 @@ async def save_prompt(
 @bot.tree.command(
     name="add-to-prompt", description="Adds content to a prompt using a modal UI"
 )
-async def add_to_prompt(
-    interaction: discord.Interaction, file: Optional[discord.Attachment]
-):
+async def add_to_prompt(interaction: discord.Interaction):
     guild_id = str(interaction.guild.id)
     try:
-        if not file:
-            modal = AddToPromptModal(interaction, bot)
-            await interaction.response.send_modal(modal)
-        else:
-            modal = AddToPromptModal(interaction, bot, file)
-            await interaction.response.send_modal(modal)
+        modal = AddToPromptModal(interaction, bot)
+        await interaction.response.send_modal(modal)
     except Exception as e:
         await interaction.response.send_message("An error occured. Please try again.")
         print(f"Error: {e}")
@@ -481,20 +491,34 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
                             break
 
             if "image" in bot.prompt_info[prompt_id].keys():
-                if isinstance(bot.prompt_info[prompt_id]["image"], str):
-                    image_files = [bot.prompt_info[prompt_id]["image"]]
+                if isinstance(bot.prompt_info[prompt_id]["image"], list):
+                    for image in bot.prompt_info[prompt_id]["image"]:
+                        file_name = image
+                        file_path = os.path.join(prompt_image_dir, guild_id, file_name)
+                        if os.path.exists(file_path):
+                            await channel.send(file=discord.File(file_path))
+                            try:
+                                os.unlink(file_path)
+                            except FileNotFoundError:
+                                pass
+                        else:
+                            await interaction.followup.send(
+                                "File is missing, please reattach the file.",
+                                ephemeral=True,
+                            )
                 else:
-                    image_files = bot.prompt_info[prompt_id]["image"]
-                for file_name in image_files:
+                    file_name = bot.prompt_info[prompt_id]["image"]
                     file_path = os.path.join(prompt_image_dir, guild_id, file_name)
-                os.makedirs(os.path.join(prompt_image_dir, guild_id), exist_ok=True)
-                file_name = bot.prompt_info[prompt_id]["image"]
-                file_path = os.path.join(prompt_image_dir, guild_id, file_name)
-                await channel.send(file=discord.File(file_path))
-                try:
-                    os.unlink(file_path)
-                except FileNotFoundError:
-                    pass
+                    if os.path.exists(file_path):
+                        await channel.send(file=discord.File(file_path))
+                        try:
+                            os.unlink(file_path)
+                        except FileNotFoundError:
+                            pass
+                    else:
+                        await interaction.followup.send(
+                            "File is missing, please reattach the file.", ephemeral=True
+                        )
             await interaction.response.send_message(
                 f"Prompt {prompt_id} sent in channel {channel.mention}", ephemeral=True
             )
@@ -573,23 +597,39 @@ async def sendAllPrompts(interaction: discord.Interaction):
                                                 break
                                         break
                         if "image" in bot.prompt_info[prompt_id].keys():
-                            try:
+                            if isinstance(bot.prompt_info[prompt_id]["image"], list):
+                                for image in bot.prompt_info[prompt_id]["image"]:
+                                    file_name = image
+                                    file_path = os.path.join(
+                                        prompt_image_dir, guild_id, file_name
+                                    )
+                                    if os.path.exists(file_path):
+                                        await channel.send(file=discord.File(file_path))
+                                        try:
+                                            os.unlink(file_path)
+                                        except FileNotFoundError:
+                                            pass
+                                    else:
+                                        await interaction.followup.send(
+                                            "File is missing, please reattach the file.",
+                                            ephemeral=True,
+                                        )
+                            else:
                                 file_name = bot.prompt_info[prompt_id]["image"]
                                 file_path = os.path.join(
                                     prompt_image_dir, guild_id, file_name
                                 )
-                                await channel.send(file=discord.File(file_path))
-                                try:
-                                    os.unlink(file_path)
-                                except FileNotFoundError:
-                                    pass
-                            except discord.Forbidden:
-                                print(f"Forbidden to send files to {channel.name}")
-                            except discord.HTTPException as e:
-                                print(
-                                    f"HTTP exception while sending message to {channel.name}: {e}"
-                                )
-                        print(f"Sent prompt {prompt_id} to {channel.name}")
+                                if os.path.exists(file_path):
+                                    await channel.send(file=discord.File(file_path))
+                                    try:
+                                        os.unlink(file_path)
+                                    except FileNotFoundError:
+                                        pass
+                                else:
+                                    await interaction.followup.send(
+                                        "File is missing, please reattach the file.",
+                                        ephemeral=True,
+                                    )
                     except discord.Forbidden:
                         await interaction.followup.send(
                             f"The bot doesn't have permission to send files in {channel.name}"
@@ -602,6 +642,7 @@ async def sendAllPrompts(interaction: discord.Interaction):
                 else:
                     await interaction.followup.send(f"Channel {channel} does not exit")
                     print(f"Channel {channel} does not exist")
+                    pass
                 prompts_to_del.append(prompt_id)
 
         if len(prompt_keys) > 0:
@@ -676,19 +717,23 @@ async def clearAllPrompts(interaction: discord.Interaction):
 
             for prompt_id in prompts_to_del:
                 if "image" in bot.prompt_info[prompt_id].keys():
-                    try:
+                    if isinstance(bot.prompt_info[prompt_id]["image"], list):
+                        for image in bot.prompt_info[prompt_id]["image"]:
+                            file_name = image
+                            file_path = os.path.join(
+                                prompt_image_dir, guild_id, file_name
+                            )
+                            try:
+                                os.unlink(file_path)
+                            except FileNotFoundError:
+                                pass
+                    else:
                         file_name = bot.prompt_info[prompt_id]["image"]
                         file_path = os.path.join(prompt_image_dir, guild_id, file_name)
                         try:
                             os.unlink(file_path)
                         except FileNotFoundError:
                             pass
-                    except discord.Forbidden:
-                        print(f"Forbidden to send files to {channel.name}")
-                    except discord.HTTPException as e:
-                        print(
-                            f"HTTP exception while sending message to {channel.name}: {e}"
-                        )
                 del bot.prompt_info[prompt_id]
             bot.save()
             msg = await interaction.original_response()
@@ -730,19 +775,21 @@ async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
 
         if confirmSend.confirmed:
             if "image" in bot.prompt_info[prompt_id_key].keys():
-                try:
+                if isinstance(bot.prompt_info[prompt_id_key]["image"], list):
+                    for image in bot.prompt_info[prompt_id_key]["image"]:
+                        file_name = bot.prompt_info[prompt_id_key]["image"]
+                        file_path = os.path.join(prompt_image_dir, guild_id, file_name)
+                        try:
+                            os.unlink(file_path)
+                        except FileNotFoundError:
+                            pass
+                else:
                     file_name = bot.prompt_info[prompt_id_key]["image"]
                     file_path = os.path.join(prompt_image_dir, guild_id, file_name)
                     try:
                         os.unlink(file_path)
                     except FileNotFoundError:
                         pass
-                except discord.Forbidden:
-                    print(f"Forbidden to send files to {channel.name}")
-                except discord.HTTPException as e:
-                    print(
-                        f"HTTP exception while sending message to {channel.name}: {e}"
-                    )
             del bot.prompt_info[prompt_id_key]
             bot.save()
             msg = await interaction.original_response()
@@ -759,11 +806,11 @@ async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
             )
     else:
         await interaction.response.send_message(
-            "This prompt was not found in your server.", ephemeral=True
+            "This prompt was not found in this server.", ephemeral=True
         )
 
 
-"""@bot.tree.command(name="add-file", description="Add a file to a specific prompt.")
+@bot.tree.command(name="add-file", description="Add a file to a specific prompt.")
 async def add_file(
     interaction: discord.Interaction, prompt_id: str, file: discord.Attachment
 ):
@@ -789,7 +836,7 @@ async def add_file(
         or file.filename.endswith(".jpeg")
         or file.filename.endswith(".webp")
         or file.filename.endswith(".webm")
-        or file.filename.endswitch(".mp3")
+        or file.filename.endswith(".mp3")
     ):
         await interaction.followup.send(
             "Please upload a .png, .jpeg, .jpg, .webm, .webp, or .mp3 file.",
@@ -815,7 +862,7 @@ async def add_file(
 
         # Generate unique filename
         file_extension = os.path.splitext(file.filename)[1]
-        file_number = len(images) + 1
+        file_number = len(images)
         new_filename = f"{prompt_id}_{file_number}{file_extension}"
         file_path = os.path.join(file_dir, new_filename)
 
@@ -858,15 +905,15 @@ async def add_file(
             await log_channel.send(file=await file.to_file())
 
     # Confirm to user
-    image_count = (
+    file_count = (
         len(bot.prompt_info[prompt_id]["image"])
         if isinstance(bot.prompt_info[prompt_id].get("image"), list)
         else 1
     )
     await interaction.followup.send(
-        f"✅ File added to prompt `{prompt_id}`. This prompt now has {image_count} image(s).",
+        f"{new_filename} added to prompt `{prompt_id}`. This prompt now has {file_count} file(s).",
         ephemeral=True,
-    )"""
+    )
 
 
 bot.run(token)
