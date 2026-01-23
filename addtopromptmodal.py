@@ -46,7 +46,7 @@ class AddToPromptModal(discord.ui.Modal):
             prompt = self.children[1].value
             if prompt_id not in self.bot.prompt_info.keys():
                 self.bot.prompt_info[prompt_id] = {"message": ""}
-            self.bot.prompt_info[prompt_id]["message"] += prompt
+            self.bot.prompt_info[prompt_id]["message"] += f"\n\n{prompt}"
             log_channel = self.bot.get_channel(
                 self.bot.config[self.guild_id]["log_channel_id"]
             )
