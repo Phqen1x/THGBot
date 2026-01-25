@@ -6,6 +6,7 @@ from promptmodal import PromptModal
 from addtopromptmodal import AddToPromptModal
 from confirmationview import ConfirmationView
 from utils import split_message
+from promptsender import send_all_prompts_concurrent
 import os
 import sys
 from typing import Optional
@@ -552,24 +553,25 @@ async def sendAllPrompts(interaction: discord.Interaction):
         if interaction.guild.get_channel(int(bot.prompt_info[prompt_id]["channel"])):
             prompt_keys.append(prompt_id)
             prompt_mentions.append(f"<#{bot.prompt_info[prompt_id]['channel']}>")
-        """log_embed = discord.Embed(
-            title=f"All prompts sent.", color=discord.Color.green()
-        )
-        log_embed.add_field(
-            name="Prompt IDs", value=f"**{"\n".join(prompt_keys)}**", inline=True
-        )
-        log_embed.add_field(
-            name="Prompt channels", value=f"{'\n'.join(prompt_mentions)}", inline=True
-        )
-        log_embed.set_author(
-            name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}"
-        )
-        if interaction.guild.icon != None:
-            log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
-        log_embed.timestamp = datetime.datetime.now()"""
 
     if confirmSend.confirmed:
-        for prompt_id in bot.prompt_info.keys():
+        prompts_to_del = await send_all_prompts_concurrent(
+            bot, interaction, guild_id, prompt_image_dir
+        )
+
+        if len(prompt_keys) > 0:
+            await prompt_ids_list(interaction, "All prompts send", log_channel)
+
+        for prompt_id in prompts_to_del:
+            del bot.prompt_info[prompt_id]
+
+        msg = await interaction.original_response()
+        await msg.edit(content="All prompts sent.")
+        bot.save()
+    else:
+        msg = await interaction.original_response()
+        await msg.edit(content="Cancelled sending all prompts.")
+        """for prompt_id in bot.prompt_info.keys():
             if interaction.guild.get_channel(
                 int(bot.prompt_info[prompt_id]["channel"])
             ):
@@ -656,7 +658,7 @@ async def sendAllPrompts(interaction: discord.Interaction):
         bot.save()
     else:
         msg = await interaction.original_response()
-        await msg.edit(content="Cancelled sending all prompts!")
+        await msg.edit(content="Cancelled sending all prompts!")"""
 
 
 @bot.tree.command(name="clear-all-prompts", description="Clear all prompts")
