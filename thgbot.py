@@ -14,6 +14,7 @@ import datetime
 import json
 import asyncio
 import re
+from editpromptview import EditPromptView
 
 try:
     datadir = os.environ["SNAP_DATA"].replace(os.environ["SNAP_REVISION"], "current")
@@ -71,6 +72,7 @@ class THGBot(commands.Bot):
     async def on_ready(self):
         await bot.tree.sync()
         self.save()
+        await bot.change_presence(activity=discord.Game(name="Created by Phqen1x"))
         print(f"Logged in as {self.user}")
 
 
@@ -405,6 +407,86 @@ async def viewPrompt(interaction: discord.Interaction, prompt_id: str):
             await interaction.response.send_message("Prompt is empty", ephemeral=True)
     else:
         await interaction.response.send_message("Prompt not found", ephemeral=True)
+
+
+"""@bot.tree.command(name="add-tribute", description="Adds tributes to the list.")
+async def add_tribute(
+    interaction: discord.Interaction, tribu_name: str, trib_id: str, trib_channel: discord.TextChannel
+):
+    guild_id = str(interaction.guild.id)
+    tribute_names = []
+    tribute_ids = []
+    tribute_channels = []
+
+
+    for prompt_id in bot.prompt_info.keys():
+        if interaction.guild.get_channel(
+            int(bot.prompt_info[prompt_id]["channel"])
+        ):
+            prompt_keys.append(prompt_id)
+            prompt_mentions.append(bot.prompt_info[prompt_id]["channel"])
+            channels.append(
+                interaction.guild.get_channel(
+                    int(bot.prompt_info[prompt_id]["channel"])
+                )
+            )
+    id_list_embed = discord.Embed(
+        title=f"**{embed_title}**\n", color=discord.Color.green()
+    )
+    # Sorts channels in the view to be more readable
+    prompt_keys = sorted(
+        prompt_keys,
+        key=lambda x: (
+            (int(re.search(r"\d+", x).group()), x[-1])
+            if re.search(r"\d+", x)
+            else (float("inf"), x)
+        ),
+    )
+    channels = sorted(channels, key=lambda ch: ch.position)
+    if len(prompt_keys) > 0:
+        id_list_embed.add_field(
+            name="**Prompt IDs**",
+            value=f"**{"\n".join(prompt_keys)}**",
+            inline=True,
+        )
+        id_list_embed.add_field(
+            name="**Prompt channels**",
+            value=f"{'\n'.join(ch.mention for ch in channels)}",
+            inline=True,
+        )
+        id_list_embed.set_author(
+            name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}"
+        )
+        id_list_embed.set_thumbnail(url=f"{interaction.user.avatar}")
+        id_list_embed.timestamp = datetime.datetime.now()
+        if send_to == bot.config[guild_id]["log_channel_id"]:
+            if interaction.response.is_done():
+                await interaction.guild.get_channel(send_to).send(
+                    embed=id_list_embed
+                )
+            else:
+                await interaction.guild.get_channel(send_to).send(
+                    embed=id_list_embed
+                )
+        else:
+            if interaction.response.is_done():
+                await interaction.followup.send(embed=id_list_embed, ephemeral=True)
+            else:
+                await interaction.response.send_message(
+                    embed=id_list_embed, ephemeral=True
+                )
+    else:
+        await interaction.response.send_message(
+            "No prompts found in guild.", ephemeral=True
+        )
+    await interaction.response.send_message("No prompts found", ephemeral=True)
+
+
+@bot.tree.command(name="tribute-list", description="Displays a list of all tributes")
+async def list_tributes(
+    interaction: discord.Interaction
+):
+    guild_id = str(interaction.guild.id)"""
 
 
 @bot.tree.command(name="save-prompt", description="Stores prompt info using a modal UI")
@@ -916,6 +998,60 @@ async def add_file(
         f"{new_filename} added to prompt `{prompt_id}`. This prompt now has {file_count} file(s).",
         ephemeral=True,
     )
+
+
+@bot.tree.command(
+    name="edit-prompt",
+    description="Provides a menu to use to edit parts of a prompt separately",
+)
+async def EditPromptview(interaction: discord.Interaction, prompt_id: str):
+    """
+    Edit various aspects of an existing prompt
+
+    Args:
+        prompt_id: The ID of the prompt to edit (e.g., D1F, D2M)
+    """
+    # Normalize the prompt_id
+    prompt_id_key = prompt_id.upper().strip().replace(" ", "_")
+
+    # Check if prompt exists
+    if prompt_id_key not in bot.prompt_info:
+        await interaction.response.send_message(
+            f"Prompt ID `{prompt_id_key}` not found. Use `/list-prompts` to see all available prompts.",
+            ephemeral=True,
+        )
+        return
+
+    # Get prompt information for display
+    prompt_data = bot.prompt_info[prompt_id_key]
+    message_preview = prompt_data.get("message", "No message set")
+    if len(message_preview) > 100:
+        message_preview = message_preview[:97] + "..."
+
+    channel_id = prompt_data.get("channel")
+    channel_mention = f"<#{channel_id}>" if channel_id else "No channel set"
+
+    file_count = 0
+    if "image" in prompt_data:
+        if isinstance(prompt_data["image"], list):
+            file_count = len(prompt_data["image"])
+        else:
+            file_count = 1
+
+    # Create the embed showing current prompt info
+    embed = discord.Embed(
+        title=f"Edit Prompt: {prompt_id_key}",
+        description="What part of the prompt do you want to edit?",
+        color=discord.Color.blue(),
+    )
+    embed.add_field(name="Current Channel", value=channel_mention, inline=False)
+    embed.add_field(name="Message Preview", value=message_preview, inline=False)
+    embed.add_field(name="Attached Files", value=f"{file_count} file(s)", inline=False)
+    embed.set_footer(text="Select an option below to edit")
+
+    # Create and send the view
+    view = EditPromptView(prompt_id_key, bot)
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 bot.run(token)
