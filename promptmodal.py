@@ -89,7 +89,7 @@ class PromptModal(discord.ui.Modal):
         if self.file:
             file_dir = os.path.join(prompt_image_dir, self.guild_id)
             file_path = os.path.join(
-                file_dir, prompt_id + os.path.splitext(self.file.filename)[1]
+                file_dir, f"SPOILER_{prompt_id} {self.file.filename}"
             )
             os.makedirs(file_dir, exist_ok=True)
             await self.file.save(file_path)
