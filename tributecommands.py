@@ -5,8 +5,10 @@ Allows Gamemakers to create, view, and manage tribute records with all associate
 
 import discord
 from database import SQLDatabase
+from inventory import Inventory
 from typing import Optional
 import time
+import os
 
 def register_tribute_commands(bot, db: SQLDatabase):
     """Register all tribute commands with the bot."""
@@ -63,6 +65,16 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 face_claim_url=face_claim_url
             )
             
+            # Auto-create empty inventory for this tribute
+            try:
+                datadir = os.environ.get("SNAP_DATA", ".")
+                inv_path = os.path.join(datadir, "config/inventories.json")
+                inventory = Inventory(inv_path)
+                inventory.create_tribute_inventory(tribute_id, capacity=10)
+            except Exception as inv_err:
+                # Log but don't fail - tribute still created
+                print(f"Warning: Could not create inventory for {tribute_id}: {inv_err}")
+            
             embed = discord.Embed(
                 title="✅ Tribute Created",
                 color=discord.Color.green()
@@ -76,6 +88,7 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 embed.add_field(name="Face Claim", value="✅ Attached", inline=False)
             if tribute['created_at']:
                 embed.add_field(name="Created", value=f"<t:{tribute['created_at']}>", inline=False)
+            embed.add_field(name="Inventory", value="✅ Empty inventory created", inline=False)
             embed.set_footer(text=f"Created by {interaction.user.name}")
             
             await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -250,6 +263,63 @@ def register_tribute_commands(bot, db: SQLDatabase):
             embed.add_field(name="Deleted Tribute", value=f"{tribute['tribute_id']} - {tribute['tribute_name']}")
             embed.description = "⚠️ All associated data (inventory, prompts, files) has been deleted."
             embed.set_footer(text=f"Deleted by {interaction.user.name}")
+             
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+             
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ Error: {str(e)}",
+                ephemeral=True
+            )
+    
+    @bot.tree.command(name="save-prompt", description="Save a prompt to a tribute")
+    @discord.app_commands.describe(
+        tribute_id="Tribute ID to attach the prompt to",
+        message="Prompt message/text"
+    )
+    async def save_prompt(
+        interaction: discord.Interaction,
+        tribute_id: str,
+        message: str
+    ):
+        """Save a prompt message to a specific tribute."""
+        
+        # Check Gamemaker role
+        if not any(role.name == "Gamemaker" for role in interaction.user.roles):
+            await interaction.response.send_message(
+                "❌ Permission Denied: You must have the Gamemaker role.",
+                ephemeral=True
+            )
+            return
+        
+        tribute_id = tribute_id.strip().upper()
+        
+        try:
+            # Check if tribute exists
+            tribute = db.get_tribute(tribute_id)
+            if not tribute:
+                await interaction.response.send_message(
+                    f"❌ Tribute not found: `{tribute_id}`",
+                    ephemeral=True
+                )
+                return
+            
+            # Get guild and channel - use current channel for prompt sending
+            guild_id = interaction.guild.id if interaction.guild else None
+            channel_id = interaction.channel.id if interaction.channel else None
+            
+            # Create/update prompt for this tribute
+            prompt = db.create_prompt(tribute_id, message, channel_id)
+            
+            embed = discord.Embed(
+                title="✅ Prompt Saved",
+                color=discord.Color.green()
+            )
+            embed.add_field(name="Tribute", value=f"{tribute['tribute_id']} - {tribute['tribute_name']}", inline=False)
+            embed.add_field(name="Message", value=f"```\n{message[:200]}\n```", inline=False)
+            if channel_id:
+                embed.add_field(name="Channel", value=f"<#{channel_id}>", inline=False)
+            embed.set_footer(text=f"Saved by {interaction.user.name}")
             
             await interaction.response.send_message(embed=embed, ephemeral=True)
             
