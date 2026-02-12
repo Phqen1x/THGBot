@@ -84,6 +84,8 @@ bot = THGBot(intents=intents)
 
 # Register inventory commands
 register_inventory_commands(bot, bot.inventory)
+
+
 async def on_guild_join(guild):
     guild_id = str(guild.id)
     guild_prompts_dir = os.path.join(datadir, "prompt", str(guild_id))
@@ -455,6 +457,8 @@ async def add_to_prompt(interaction: discord.Interaction):
 @bot.tree.command(name="send-prompt", description="Send a prompt")
 async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
     # Sends the prompt
+    await interaction.response.defer(ephemeral=True)
+    
     prompt_id = prompt_id.strip().upper()
     guild_id = str(interaction.guild.id)
     if prompt_id in bot.prompt_info and interaction.guild.get_channel(
@@ -523,14 +527,14 @@ async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
                         await interaction.followup.send(
                             "File is missing, please reattach the file.", ephemeral=True
                         )
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"Prompt {prompt_id} sent in channel {channel.mention}", ephemeral=True
             )
             await log_channel.send(embed=log_embed)
             del bot.prompt_info[prompt_id]
             bot.save()
     else:
-        await interaction.response.send_message("Prompt not found")
+        await interaction.followup.send("Prompt not found", ephemeral=True)
 
 
 @bot.tree.command(name="send-all-prompts", description="Send all prompts")

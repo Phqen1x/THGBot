@@ -152,10 +152,7 @@ class PromptModal(discord.ui.Modal):
                     for message in messages:
                         await log_channel.send(message)
                     if "image" in self.bot.prompt_info[prompt_id].keys():
-                        file_name = self.bot.prompt_info[prompt_id]["image"]
-                        file_path = os.path.join(
-                            prompt_image_dir, self.guild_id, file_name
-                        )
+                        file_path = self.bot.prompt_info[prompt_id]["image"]
                         await log_channel.send(file=discord.File(file_path))
                 else:
                     print(
