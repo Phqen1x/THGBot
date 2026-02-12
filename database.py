@@ -157,27 +157,23 @@ class SQLDatabase:
             else:
                 logger.info("Database schema already exists, checking for migrations...")
             
-            # Run migrations for existing databases
-            self._run_migrations()
+            # Run migrations for existing databases (no lock needed - already holding it)
+            self._run_migrations_unlocked(conn, cursor)
     
-    def _run_migrations(self):
-        """Run schema migrations for existing databases."""
-        with self._lock:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            
-            # Check if face_claim_url column exists in tributes table
-            cursor.execute("PRAGMA table_info(tributes)")
-            columns = [row[1] for row in cursor.fetchall()]
-            
-            if "face_claim_url" not in columns:
-                logger.info("Adding face_claim_url column to tributes table")
-                try:
-                    cursor.execute("ALTER TABLE tributes ADD COLUMN face_claim_url TEXT")
-                    conn.commit()
-                    logger.info("✓ Successfully added face_claim_url column")
-                except sqlite3.OperationalError as e:
-                    logger.error(f"Failed to add face_claim_url column: {e}")
+    def _run_migrations_unlocked(self, conn, cursor):
+        """Run schema migrations for existing databases (assumes lock is already held)."""
+        # Check if face_claim_url column exists in tributes table
+        cursor.execute("PRAGMA table_info(tributes)")
+        columns = [row[1] for row in cursor.fetchall()]
+        
+        if "face_claim_url" not in columns:
+            logger.info("Adding face_claim_url column to tributes table")
+            try:
+                cursor.execute("ALTER TABLE tributes ADD COLUMN face_claim_url TEXT")
+                conn.commit()
+                logger.info("✓ Successfully added face_claim_url column")
+            except sqlite3.OperationalError as e:
+                logger.error(f"Failed to add face_claim_url column: {e}")
     
     # TRIBUTE CRUD OPERATIONS
     

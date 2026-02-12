@@ -16,14 +16,14 @@ def register_tribute_commands(bot, db: SQLDatabase):
         tribute_id="Tribute ID (e.g., D1F, D1M)",
         tribute_name="Tribute name (e.g., John Doe)",
         user="Discord user to link to this tribute",
-        face_claim="(Optional) Image URL for character face claim (e.g., https://example.com/image.jpg)"
+        face_claim="(Optional) Image file or URL for character face claim"
     )
     async def create_tribute(
         interaction: discord.Interaction,
         tribute_id: str,
         tribute_name: str,
         user: discord.User,
-        face_claim: Optional[str] = None
+        face_claim: Optional[discord.Attachment] = None
     ):
         """Create a new tribute with ID, name, Discord user link, and optional face claim."""
         
@@ -49,10 +49,10 @@ def register_tribute_commands(bot, db: SQLDatabase):
         guild_id = interaction.guild.id if interaction.guild else None
         
         try:
-            # Handle face claim URL
+            # Handle face claim - use attachment URL if provided
             face_claim_url = None
             if face_claim:
-                face_claim_url = face_claim if face_claim.startswith("http") else None
+                face_claim_url = face_claim.url
             
             tribute = db.create_tribute(
                 tribute_id=tribute_id,
