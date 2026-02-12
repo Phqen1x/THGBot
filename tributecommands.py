@@ -274,15 +274,13 @@ def register_tribute_commands(bot, db: SQLDatabase):
     
     @bot.tree.command(name="save-prompt", description="Save a prompt to a tribute")
     @discord.app_commands.describe(
-        tribute_id="Tribute ID to attach the prompt to",
-        message="Prompt message/text"
+        tribute_id="Tribute ID to attach the prompt to"
     )
     async def save_prompt(
         interaction: discord.Interaction,
-        tribute_id: str,
-        message: str
+        tribute_id: str
     ):
-        """Save a prompt message to a specific tribute."""
+        """Save a prompt message to a specific tribute using a modal."""
         
         # Check Gamemaker role
         if not any(role.name == "Gamemaker" for role in interaction.user.roles):
@@ -304,24 +302,44 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 )
                 return
             
-            # Get guild and channel - use current channel for prompt sending
-            guild_id = interaction.guild.id if interaction.guild else None
-            channel_id = interaction.channel.id if interaction.channel else None
+            # Show modal for prompt message
+            class PromptMessageModal(discord.ui.Modal, title="Prompt Message"):
+                message = discord.ui.TextInput(
+                    label="Prompt Message",
+                    placeholder="Enter the prompt message for this tribute",
+                    style=discord.TextStyle.long,
+                    min_length=1,
+                    max_length=2000
+                )
+                
+                async def on_submit(self, modal_interaction: discord.Interaction) -> None:
+                    try:
+                        # Get current channel as default
+                        channel_id = modal_interaction.channel.id if modal_interaction.channel else None
+                        
+                        # Create prompt in database
+                        prompt = db.create_prompt(tribute_id, str(self.message), channel_id)
+                        
+                        # Confirmation embed
+                        embed = discord.Embed(
+                            title="✅ Prompt Saved",
+                            color=discord.Color.green()
+                        )
+                        embed.add_field(name="Tribute", value=f"{tribute['tribute_id']} - {tribute['tribute_name']}", inline=False)
+                        embed.add_field(name="Message", value=f"```\n{str(self.message)[:200]}\n```", inline=False)
+                        if channel_id:
+                            embed.add_field(name="Channel", value=f"<#{channel_id}>", inline=False)
+                        embed.set_footer(text=f"Saved by {modal_interaction.user.name}")
+                        
+                        await modal_interaction.response.send_message(embed=embed, ephemeral=True)
+                    except Exception as e:
+                        await modal_interaction.response.send_message(
+                            f"❌ Error saving prompt: {str(e)}",
+                            ephemeral=True
+                        )
             
-            # Create/update prompt for this tribute
-            prompt = db.create_prompt(tribute_id, message, channel_id)
-            
-            embed = discord.Embed(
-                title="✅ Prompt Saved",
-                color=discord.Color.green()
-            )
-            embed.add_field(name="Tribute", value=f"{tribute['tribute_id']} - {tribute['tribute_name']}", inline=False)
-            embed.add_field(name="Message", value=f"```\n{message[:200]}\n```", inline=False)
-            if channel_id:
-                embed.add_field(name="Channel", value=f"<#{channel_id}>", inline=False)
-            embed.set_footer(text=f"Saved by {interaction.user.name}")
-            
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            # Show the modal
+            await interaction.response.send_modal(PromptMessageModal())
             
         except Exception as e:
             await interaction.response.send_message(
