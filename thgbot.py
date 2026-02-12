@@ -9,6 +9,9 @@ from utils import split_message
 from promptsender import send_all_prompts_concurrent
 from inventory import Inventory
 from inventory_commands import register_inventory_commands
+from database import SQLDatabase
+from storage import StorageManager
+from tributecommands import register_tribute_commands
 import os
 import sys
 from typing import Optional
@@ -16,6 +19,9 @@ import datetime
 import json
 import asyncio
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 try:
     datadir = os.environ["SNAP_DATA"].replace(os.environ["SNAP_REVISION"], "current")
@@ -39,6 +45,8 @@ class THGBot(commands.Bot):
         self.prompt_info = {}
         self.config = {}
         self.inventory = Inventory(datadir)
+        self.db = SQLDatabase(os.path.join(datadir, "thgbot.db"))
+        self.storage = StorageManager(self.db)
         self.load()
 
     def save(self):
@@ -84,6 +92,9 @@ bot = THGBot(intents=intents)
 
 # Register inventory commands
 register_inventory_commands(bot, bot.inventory)
+
+# Register tribute commands
+register_tribute_commands(bot, bot.db)
 
 
 async def on_guild_join(guild):
