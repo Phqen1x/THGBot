@@ -5,5 +5,12 @@
       "1": "Canteen (3/3 uses.) [Restores +2 thirst.]",
       "2": "Meat (2/2 uses.) [Restores +2 hunger.]"
     }
+  },
+  "d7f": {
+    "capacity": 10,
+    "items": {
+      "1": "Meat (2/2 uses.) [Restores +2 Hunger.]",
+      "2": "Canteen (3/3 uses.) [Restores +2 Thirst.]"
+    }
   }
 }

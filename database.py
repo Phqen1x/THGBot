@@ -81,7 +81,8 @@ class SQLDatabase:
                     user_id INTEGER NOT NULL,
                     user_mention TEXT NOT NULL,
                     guild_id INTEGER,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at INTEGER,
+                    face_claim_url TEXT
                 )
             """)
             
@@ -110,17 +111,15 @@ class SQLDatabase:
                 )
             """)
             
-            # Create prompts table
+            # Create prompts table (1:1 with tributes - one prompt per tribute)
             cursor.execute("""
                 CREATE TABLE prompts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tribute_id TEXT NOT NULL,
-                    prompt_id TEXT NOT NULL,
+                    tribute_id TEXT NOT NULL UNIQUE,
                     message TEXT NOT NULL,
                     channel_id INTEGER,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE,
-                    UNIQUE(tribute_id, prompt_id)
+                    created_at INTEGER,
+                    FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE
                 )
             """)
             
@@ -165,16 +164,22 @@ class SQLDatabase:
         tribute_name: str, 
         user_id: int, 
         user_mention: str,
-        guild_id: Optional[int] = None
+        guild_id: Optional[int] = None,
+        created_at: Optional[int] = None,
+        face_claim_url: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create a new tribute."""
+        import time
+        if created_at is None:
+            created_at = int(time.time())
+        
         with self._lock:
             with self.transaction() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    INSERT INTO tributes (tribute_id, tribute_name, user_id, user_mention, guild_id)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (tribute_id, tribute_name, user_id, user_mention, guild_id))
+                    INSERT INTO tributes (tribute_id, tribute_name, user_id, user_mention, guild_id, created_at, face_claim_url)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (tribute_id, tribute_name, user_id, user_mention, guild_id, created_at, face_claim_url))
                 
                 tribute_row_id = cursor.lastrowid
                 cursor.execute("SELECT * FROM tributes WHERE id = ?", (tribute_row_id,))
@@ -230,6 +235,42 @@ class SQLDatabase:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM tributes WHERE tribute_id = ?", (tribute_id,))
                 return cursor.rowcount > 0
+    
+    def get_tribute_full(self, tribute_id: str) -> Optional[Dict[str, Any]]:
+        """Get complete tribute data including inventory, prompt, and files."""
+        with self._lock:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Get tribute
+            cursor.execute("SELECT * FROM tributes WHERE tribute_id = ?", (tribute_id,))
+            tribute = cursor.fetchone()
+            if not tribute:
+                return None
+            
+            result = dict(tribute)
+            
+            # Get inventory
+            cursor.execute("SELECT * FROM inventories WHERE tribute_id = ?", (tribute_id,))
+            inv_row = cursor.fetchone()
+            if inv_row:
+                result['inventory'] = dict(inv_row)
+                cursor.execute("""
+                    SELECT item_number, item_name FROM inventory_items
+                    WHERE tribute_id = ? ORDER BY item_number
+                """, (tribute_id,))
+                result['inventory']['items'] = {str(row['item_number']): row['item_name'] for row in cursor.fetchall()}
+            
+            # Get prompt
+            cursor.execute("SELECT * FROM prompts WHERE tribute_id = ?", (tribute_id,))
+            prompt_row = cursor.fetchone()
+            result['prompt'] = dict(prompt_row) if prompt_row else None
+            
+            # Get files
+            cursor.execute("SELECT * FROM files WHERE tribute_id = ?", (tribute_id,))
+            result['files'] = [dict(row) for row in cursor.fetchall()]
+            
+            return result
     
     # INVENTORY CRUD OPERATIONS
     
@@ -366,60 +407,60 @@ class SQLDatabase:
     def create_prompt(
         self,
         tribute_id: str,
-        prompt_id: str,
         message: str,
         channel_id: int
     ) -> Dict[str, Any]:
-        """Create a prompt for a tribute."""
+        """Create a prompt for a tribute (1:1 relationship)."""
+        import time
+        created_at = int(time.time())
+        
         with self._lock:
             with self.transaction() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    INSERT INTO prompts (tribute_id, prompt_id, message, channel_id)
+                    INSERT INTO prompts (tribute_id, message, channel_id, created_at)
                     VALUES (?, ?, ?, ?)
-                """, (tribute_id, prompt_id, message, channel_id))
+                """, (tribute_id, message, channel_id, created_at))
                 
                 cursor.execute("""
-                    SELECT * FROM prompts
-                    WHERE tribute_id = ? AND prompt_id = ?
-                """, (tribute_id, prompt_id))
+                    SELECT * FROM prompts WHERE tribute_id = ?
+                """, (tribute_id,))
                 row = cursor.fetchone()
                 return dict(row) if row else None
     
-    def get_prompt(self, tribute_id: str, prompt_id: str) -> Optional[Dict[str, Any]]:
-        """Get a specific prompt."""
+    def get_prompt(self, tribute_id: str) -> Optional[Dict[str, Any]]:
+        """Get prompt for a tribute."""
         with self._lock:
             conn = self.get_connection()
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT * FROM prompts
-                WHERE tribute_id = ? AND prompt_id = ?
-            """, (tribute_id, prompt_id))
+                SELECT * FROM prompts WHERE tribute_id = ?
+            """, (tribute_id,))
             row = cursor.fetchone()
             return dict(row) if row else None
     
-    def get_all_prompts(self, tribute_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get all prompts, optionally filtered by tribute."""
+    def get_all_prompts(self, guild_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get all prompts, optionally filtered by guild."""
         with self._lock:
             conn = self.get_connection()
             cursor = conn.cursor()
-            if tribute_id:
+            if guild_id:
                 cursor.execute("""
-                    SELECT * FROM prompts
-                    WHERE tribute_id = ?
-                    ORDER BY prompt_id
-                """, (tribute_id,))
+                    SELECT p.* FROM prompts p
+                    JOIN tributes t ON p.tribute_id = t.tribute_id
+                    WHERE t.guild_id = ?
+                    ORDER BY p.tribute_id
+                """, (guild_id,))
             else:
                 cursor.execute("""
                     SELECT * FROM prompts
-                    ORDER BY tribute_id, prompt_id
+                    ORDER BY tribute_id
                 """)
             return [dict(row) for row in cursor.fetchall()]
     
     def update_prompt(
         self,
         tribute_id: str,
-        prompt_id: str,
         **kwargs
     ) -> Optional[Dict[str, Any]]:
         """Update prompt fields."""
@@ -430,33 +471,69 @@ class SQLDatabase:
                 updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
                 
                 if not updates:
-                    return self.get_prompt(tribute_id, prompt_id)
+                    return self.get_prompt(tribute_id)
                 
                 set_clause = ', '.join(f"{k} = ?" for k in updates.keys())
                 cursor.execute(
-                    f"UPDATE prompts SET {set_clause} WHERE tribute_id = ? AND prompt_id = ?",
-                    list(updates.values()) + [tribute_id, prompt_id]
+                    f"UPDATE prompts SET {set_clause} WHERE tribute_id = ?",
+                    list(updates.values()) + [tribute_id]
                 )
-                return self.get_prompt(tribute_id, prompt_id)
+                return self.get_prompt(tribute_id)
     
-    def delete_prompt(self, tribute_id: str, prompt_id: str) -> bool:
+    def delete_prompt(self, tribute_id: str) -> bool:
         """Delete a prompt."""
         with self._lock:
             with self.transaction() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    DELETE FROM prompts
-                    WHERE tribute_id = ? AND prompt_id = ?
-                """, (tribute_id, prompt_id))
+                    DELETE FROM prompts WHERE tribute_id = ?
+                """, (tribute_id,))
                 return cursor.rowcount > 0
     
-    def delete_all_prompts(self, tribute_id: Optional[str] = None) -> int:
-        """Delete all prompts, optionally for a specific tribute."""
+    def delete_all_prompts(self) -> int:
+        """Delete all prompts."""
         with self._lock:
             with self.transaction() as conn:
                 cursor = conn.cursor()
-                if tribute_id:
-                    cursor.execute("DELETE FROM prompts WHERE tribute_id = ?", (tribute_id,))
-                else:
-                    cursor.execute("DELETE FROM prompts")
+                cursor.execute("DELETE FROM prompts")
                 return cursor.rowcount
+    
+    # FILE CRUD OPERATIONS
+    
+    def add_file(self, tribute_id: str, file_type: str, file_path: str) -> Dict[str, Any]:
+        """Add a file to a tribute."""
+        with self._lock:
+            with self.transaction() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO files (tribute_id, file_type, file_path, created_at)
+                    VALUES (?, ?, ?, ?)
+                """, (tribute_id, file_type, file_path, int(__import__('time').time())))
+                
+                file_id = cursor.lastrowid
+                cursor.execute("SELECT * FROM files WHERE id = ?", (file_id,))
+                row = cursor.fetchone()
+                return dict(row) if row else None
+    
+    def get_files(self, tribute_id: str, file_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get files for a tribute, optionally filtered by type."""
+        with self._lock:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            if file_type:
+                cursor.execute("""
+                    SELECT * FROM files WHERE tribute_id = ? AND file_type = ?
+                """, (tribute_id, file_type))
+            else:
+                cursor.execute("""
+                    SELECT * FROM files WHERE tribute_id = ?
+                """, (tribute_id,))
+            return [dict(row) for row in cursor.fetchall()]
+    
+    def delete_file(self, file_id: int) -> bool:
+        """Delete a file."""
+        with self._lock:
+            with self.transaction() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM files WHERE id = ?", (file_id,))
+                return cursor.rowcount > 0
