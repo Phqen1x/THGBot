@@ -16,7 +16,7 @@ def register_tribute_commands(bot, db: SQLDatabase):
         tribute_id="Tribute ID (e.g., D1F, D1M)",
         tribute_name="Tribute name (e.g., John Doe)",
         user="Discord user to link to this tribute",
-        face_claim="Image URL or attached image for face claim"
+        face_claim="(Optional) Image URL for character face claim (e.g., https://example.com/image.jpg)"
     )
     async def create_tribute(
         interaction: discord.Interaction,

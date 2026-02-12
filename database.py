@@ -66,95 +66,118 @@ class SQLDatabase:
             cursor.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='tributes'"
             )
-            if cursor.fetchone():
-                logger.info("Database schema already initialized")
-                return
+            tables_exist = cursor.fetchone()
             
-            logger.info(f"Initializing database schema at {self.db_path}")
+            if not tables_exist:
+                logger.info(f"Initializing database schema at {self.db_path}")
+                
+                # Create tributes table
+                cursor.execute("""
+                    CREATE TABLE tributes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tribute_id TEXT NOT NULL UNIQUE,
+                        tribute_name TEXT NOT NULL,
+                        user_id INTEGER NOT NULL,
+                        user_mention TEXT NOT NULL,
+                        guild_id INTEGER,
+                        created_at INTEGER,
+                        face_claim_url TEXT
+                    )
+                """)
+                
+                # Create inventories table
+                cursor.execute("""
+                    CREATE TABLE inventories (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tribute_id TEXT NOT NULL UNIQUE,
+                        capacity INTEGER DEFAULT 10,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE
+                    )
+                """)
+                
+                # Create inventory_items table
+                cursor.execute("""
+                    CREATE TABLE inventory_items (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tribute_id TEXT NOT NULL,
+                        item_number INTEGER NOT NULL,
+                        item_name TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE,
+                        UNIQUE(tribute_id, item_number)
+                    )
+                """)
+                
+                # Create prompts table (1:1 with tributes - one prompt per tribute)
+                cursor.execute("""
+                    CREATE TABLE prompts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tribute_id TEXT NOT NULL UNIQUE,
+                        message TEXT NOT NULL,
+                        channel_id INTEGER,
+                        created_at INTEGER,
+                        FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE
+                    )
+                """)
+                
+                # Create prompt_images table
+                cursor.execute("""
+                    CREATE TABLE prompt_images (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        prompt_id TEXT NOT NULL,
+                        file_path TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # Create files table
+                cursor.execute("""
+                    CREATE TABLE files (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tribute_id TEXT NOT NULL,
+                        file_type TEXT,
+                        file_path TEXT NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE
+                    )
+                """)
+                
+                # Create indexes
+                cursor.execute("CREATE INDEX idx_tributes_tribute_id ON tributes(tribute_id)")
+                cursor.execute("CREATE INDEX idx_tributes_user_id ON tributes(user_id)")
+                cursor.execute("CREATE INDEX idx_inventories_tribute_id ON inventories(tribute_id)")
+                cursor.execute("CREATE INDEX idx_inventory_items_tribute_id ON inventory_items(tribute_id)")
+                cursor.execute("CREATE INDEX idx_prompts_tribute_id ON prompts(tribute_id)")
+                cursor.execute("CREATE INDEX idx_files_tribute_id ON files(tribute_id)")
+                
+                conn.commit()
+                logger.info("Database schema initialized successfully")
+            else:
+                logger.info("Database schema already exists, checking for migrations...")
             
-            # Create tributes table
-            cursor.execute("""
-                CREATE TABLE tributes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tribute_id TEXT NOT NULL UNIQUE,
-                    tribute_name TEXT NOT NULL,
-                    user_id INTEGER NOT NULL,
-                    user_mention TEXT NOT NULL,
-                    guild_id INTEGER,
-                    created_at INTEGER,
-                    face_claim_url TEXT
-                )
-            """)
+            # Run migrations for existing databases
+            self._run_migrations()
+    
+    def _run_migrations(self):
+        """Run schema migrations for existing databases."""
+        with self._lock:
+            conn = self.get_connection()
+            cursor = conn.cursor()
             
-            # Create inventories table
-            cursor.execute("""
-                CREATE TABLE inventories (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tribute_id TEXT NOT NULL UNIQUE,
-                    capacity INTEGER DEFAULT 10,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE
-                )
-            """)
+            # Check if face_claim_url column exists in tributes table
+            cursor.execute("PRAGMA table_info(tributes)")
+            columns = [row[1] for row in cursor.fetchall()]
             
-            # Create inventory_items table
-            cursor.execute("""
-                CREATE TABLE inventory_items (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tribute_id TEXT NOT NULL,
-                    item_number INTEGER NOT NULL,
-                    item_name TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE,
-                    UNIQUE(tribute_id, item_number)
-                )
-            """)
-            
-            # Create prompts table (1:1 with tributes - one prompt per tribute)
-            cursor.execute("""
-                CREATE TABLE prompts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tribute_id TEXT NOT NULL UNIQUE,
-                    message TEXT NOT NULL,
-                    channel_id INTEGER,
-                    created_at INTEGER,
-                    FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE
-                )
-            """)
-            
-            # Create prompt_images table
-            cursor.execute("""
-                CREATE TABLE prompt_images (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    prompt_id TEXT NOT NULL,
-                    file_path TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Create files table
-            cursor.execute("""
-                CREATE TABLE files (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    tribute_id TEXT NOT NULL,
-                    file_type TEXT,
-                    file_path TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE
-                )
-            """)
-            
-            # Create indexes
-            cursor.execute("CREATE INDEX idx_tributes_tribute_id ON tributes(tribute_id)")
-            cursor.execute("CREATE INDEX idx_tributes_user_id ON tributes(user_id)")
-            cursor.execute("CREATE INDEX idx_inventories_tribute_id ON inventories(tribute_id)")
-            cursor.execute("CREATE INDEX idx_inventory_items_tribute_id ON inventory_items(tribute_id)")
-            cursor.execute("CREATE INDEX idx_prompts_tribute_id ON prompts(tribute_id)")
-            cursor.execute("CREATE INDEX idx_files_tribute_id ON files(tribute_id)")
-            
-            conn.commit()
-            logger.info("Database schema initialized successfully")
+            if "face_claim_url" not in columns:
+                logger.info("Adding face_claim_url column to tributes table")
+                try:
+                    cursor.execute("ALTER TABLE tributes ADD COLUMN face_claim_url TEXT")
+                    conn.commit()
+                    logger.info("✓ Successfully added face_claim_url column")
+                except sqlite3.OperationalError as e:
+                    logger.error(f"Failed to add face_claim_url column: {e}")
     
     # TRIBUTE CRUD OPERATIONS
     
