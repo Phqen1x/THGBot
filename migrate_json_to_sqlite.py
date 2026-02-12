@@ -174,7 +174,7 @@ def migrate(db: SQLDatabase, dry_run: bool = False) -> MigrationReport:
         except Exception as e:
             report.add_error(f"Failed to migrate inventory for {tribute_id}: {e}")
     
-    # Migrate prompts
+    # Migrate prompts (now 1:1 with tribute, no separate prompt_id)
     logger.info("\n--- Migrating Prompts ---")
     for prompt_id, prompt_data in prompts_data.items():
         try:
@@ -201,10 +201,11 @@ def migrate(db: SQLDatabase, dry_run: bool = False) -> MigrationReport:
                 continue
             
             if not dry_run:
-                db.create_prompt(tribute_id, prompt_id_upper, message, channel_id)
+                # Create prompt (now 1:1 with tribute, no prompt_id parameter)
+                db.create_prompt(tribute_id, message, channel_id)
             
             report.prompts_migrated += 1
-            logger.info(f"  ✓ Migrated prompt: {prompt_id_upper} (tribute: {tribute_id})")
+            logger.info(f"  ✓ Migrated prompt for: {tribute_id}")
         
         except Exception as e:
             report.add_error(f"Failed to migrate prompt {prompt_id}: {e}")

@@ -4,7 +4,33 @@ import os
 from utils import split_message
 
 
-async def send_single_prompt(bot, interaction, prompt_id, guild_id, prompt_image_dir):
+async def send_inventory_for_tribute(channel, storage, tribute_id):
+    """
+    Send the inventory associated with a tribute to the channel.
+    
+    Args:
+        channel: Discord channel to send to
+        storage: Storage manager with access to inventory data
+        tribute_id: The tribute ID to fetch inventory for
+    """
+    try:
+        inventory_data = storage.get_inventory(tribute_id)
+        if inventory_data:
+            items = inventory_data.get("items", {})
+            if items:
+                embed = discord.Embed(
+                    title=f"{tribute_id} Inventory",
+                    description="Associated inventory with this prompt",
+                    color=discord.Color.gold()
+                )
+                items_text = "\n".join([f"**{num}.** {item}" for num, item in items.items()])
+                embed.add_field(name="Items", value=items_text, inline=False)
+                await channel.send(embed=embed)
+    except Exception as e:
+        print(f"Failed to send inventory for {tribute_id}: {e}")
+
+
+async def send_single_prompt(bot, interaction, prompt_id, guild_id, prompt_image_dir, storage=None, tribute_id=None):
     """
     Sends a single prompt to its designated channel.
 
@@ -14,6 +40,8 @@ async def send_single_prompt(bot, interaction, prompt_id, guild_id, prompt_image
         prompt_id: The ID of the prompt to send
         guild_id: The guild ID as a string
         prompt_image_dir: Directory where prompt images are stored
+        storage: Optional storage manager to send inventory with prompt
+        tribute_id: Optional tribute ID to send inventory for
 
     Returns:
         prompt_id if successful, None otherwise
@@ -84,6 +112,10 @@ async def send_single_prompt(bot, interaction, prompt_id, guild_id, prompt_image
                         ephemeral=True,
                     )
 
+        # Send associated inventory if provided
+        if storage and tribute_id:
+            await send_inventory_for_tribute(channel, storage, tribute_id)
+
         return prompt_id  # Return the prompt_id if successful
 
     except discord.Forbidden:
@@ -98,7 +130,7 @@ async def send_single_prompt(bot, interaction, prompt_id, guild_id, prompt_image
         return None
 
 
-async def send_all_prompts_concurrent(bot, interaction, guild_id, prompt_image_dir):
+async def send_all_prompts_concurrent(bot, interaction, guild_id, prompt_image_dir, storage=None):
     """
     Sends all prompts concurrently using asyncio.gather().
 
@@ -107,6 +139,7 @@ async def send_all_prompts_concurrent(bot, interaction, guild_id, prompt_image_d
         interaction: The discord interaction
         guild_id: The guild ID as a string
         prompt_image_dir: Directory where prompt images are stored
+        storage: Optional storage manager to send inventory with prompts
 
     Returns:
         List of successfully sent prompt IDs
@@ -115,9 +148,18 @@ async def send_all_prompts_concurrent(bot, interaction, guild_id, prompt_image_d
     tasks = []
     for prompt_id in bot.prompt_info.keys():
         if interaction.guild.get_channel(int(bot.prompt_info[prompt_id]["channel"])):
+            # Try to get tribute_id if storage is available
+            tribute_id = None
+            if storage:
+                # In the new schema, prompt_id may be a tribute_id
+                try:
+                    tribute_id = prompt_id
+                except:
+                    pass
+            
             tasks.append(
                 send_single_prompt(
-                    bot, interaction, prompt_id, guild_id, prompt_image_dir
+                    bot, interaction, prompt_id, guild_id, prompt_image_dir, storage, tribute_id
                 )
             )
 

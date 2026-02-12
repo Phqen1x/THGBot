@@ -115,10 +115,10 @@ class StorageManager:
     
     # PROMPT OPERATIONS
     
-    def get_prompt(self, tribute_id: str, prompt_id: str) -> Optional[Dict[str, Any]]:
+    def get_prompt(self, tribute_id: str) -> Optional[Dict[str, Any]]:
         """Get prompt from SQLite, fallback to JSON."""
         # Try SQLite first
-        prompt = self.db.get_prompt(tribute_id, prompt_id)
+        prompt = self.db.get_prompt(tribute_id)
         if prompt:
             return {
                 "message": prompt['message'],
@@ -126,23 +126,23 @@ class StorageManager:
                 "image": None  # Handle separately if needed
             }
         
-        # Fallback to JSON
+        # Fallback to JSON - match tribute_id as key
         if self.fallback_mode:
             prompts = self.load_json_file(PROMPTS_JSON)
-            if prompt_id.upper() in prompts:
-                logger.info(f"Prompt fallback: {prompt_id} from JSON")
-                return prompts[prompt_id.upper()]
+            if tribute_id.upper() in prompts:
+                logger.info(f"Prompt fallback: {tribute_id} from JSON")
+                return prompts[tribute_id.upper()]
         
         return None
     
-    def get_all_prompts(self, tribute_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_all_prompts(self, guild_id: Optional[int] = None) -> Dict[str, Any]:
         """Get all prompts from SQLite, fallback to JSON for missing ones."""
         result = {}
         
         # Get from SQLite
-        prompts = self.db.get_all_prompts(tribute_id)
+        prompts = self.db.get_all_prompts(guild_id)
         for prompt in prompts:
-            result[prompt['prompt_id']] = {
+            result[prompt['tribute_id']] = {
                 "message": prompt['message'],
                 "channel": prompt['channel_id']
             }
@@ -160,44 +160,42 @@ class StorageManager:
     def create_prompt(
         self,
         tribute_id: str,
-        prompt_id: str,
         message: str,
         channel_id: int
     ) -> bool:
-        """Create prompt in SQLite."""
+        """Create prompt in SQLite (1:1 with tribute)."""
         try:
-            self.db.create_prompt(tribute_id, prompt_id, message, channel_id)
+            self.db.create_prompt(tribute_id, message, channel_id)
             return True
         except Exception as e:
-            logger.error(f"Failed to create prompt {prompt_id}: {e}")
+            logger.error(f"Failed to create prompt for {tribute_id}: {e}")
             return False
     
     def update_prompt(
         self,
         tribute_id: str,
-        prompt_id: str,
         **kwargs
     ) -> bool:
         """Update prompt in SQLite."""
         try:
-            self.db.update_prompt(tribute_id, prompt_id, **kwargs)
+            self.db.update_prompt(tribute_id, **kwargs)
             return True
         except Exception as e:
-            logger.error(f"Failed to update prompt {prompt_id}: {e}")
+            logger.error(f"Failed to update prompt for {tribute_id}: {e}")
             return False
     
-    def delete_prompt(self, tribute_id: str, prompt_id: str) -> bool:
+    def delete_prompt(self, tribute_id: str) -> bool:
         """Delete prompt from SQLite."""
         try:
-            return self.db.delete_prompt(tribute_id, prompt_id)
+            return self.db.delete_prompt(tribute_id)
         except Exception as e:
-            logger.error(f"Failed to delete prompt {prompt_id}: {e}")
+            logger.error(f"Failed to delete prompt for {tribute_id}: {e}")
             return False
     
-    def delete_all_prompts(self, tribute_id: Optional[str] = None) -> bool:
+    def delete_all_prompts(self) -> bool:
         """Delete all prompts in SQLite."""
         try:
-            self.db.delete_all_prompts(tribute_id)
+            self.db.delete_all_prompts()
             return True
         except Exception as e:
             logger.error(f"Failed to delete prompts: {e}")
