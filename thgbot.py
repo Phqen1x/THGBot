@@ -8,7 +8,7 @@ from confirmationview import ConfirmationView
 from utils import split_message
 from promptsender import send_all_prompts_concurrent
 from inventory import Inventory
-from inventory_commands import InventoryCog
+from inventory_commands import register_inventory_commands
 import os
 import sys
 from typing import Optional
@@ -73,9 +73,6 @@ class THGBot(commands.Bot):
 
     async def on_ready(self):
         await bot.tree.sync()
-        if not hasattr(self, '_inventory_cog_loaded'):
-            await self.add_cog(InventoryCog(self, self.inventory))
-            self._inventory_cog_loaded = True
         self.save()
         print(f"Logged in as {self.user}")
 
@@ -85,8 +82,8 @@ intents.message_content = True
 
 bot = THGBot(intents=intents)
 
-
-@bot.event
+# Register inventory commands
+register_inventory_commands(bot, bot.inventory)
 async def on_guild_join(guild):
     guild_id = str(guild.id)
     guild_prompts_dir = os.path.join(datadir, "prompt", str(guild_id))
