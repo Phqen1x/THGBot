@@ -186,7 +186,7 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 embed.add_field(name="Face Claim", value="✅ Attached", inline=False)
             if tribute['created_at']:
                 embed.add_field(name="Created", value=f"<t:{tribute['created_at']}>", inline=False)
-            embed.add_field(name="Prompt Channel", value=f"<#{prompt_channel.id}>", inline=True)
+            embed.add_field(name="Prompt Channel", value=f"<#{prompt_channel_id}>", inline=True)
             embed.add_field(name="Inventory Capacity", value=f"{inventory_capacity} slots", inline=True)
             embed.add_field(name="Inventory", value="✅ Empty inventory created", inline=False)
             embed.set_footer(text=f"Created by {interaction.user.name}")
