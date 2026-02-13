@@ -63,16 +63,20 @@ class StorageManager:
             return None
     
     def create_inventory(self, tribute_id: str, capacity: int = 10) -> bool:
-        """Create inventory in JSON storage."""
+        """Create inventory in JSON storage (or update capacity if exists)."""
         try:
             inventories = self.load_json_file(INVENTORIES_JSON)
-            if tribute_id.lower() in inventories:
-                logger.warning(f"Inventory already exists for {tribute_id}")
-                return True
+            tribute_id_lower = tribute_id.lower()
             
-            inventories[tribute_id.lower()] = {"capacity": capacity, "items": {}}
+            if tribute_id_lower in inventories:
+                # Update capacity if inventory already exists
+                inventories[tribute_id_lower]["capacity"] = capacity
+                logger.info(f"Updated inventory capacity for {tribute_id} to {capacity}")
+            else:
+                inventories[tribute_id_lower] = {"capacity": capacity, "items": {}}
+                logger.info(f"Created inventory for {tribute_id} with capacity {capacity}")
+            
             self.save_json_file(INVENTORIES_JSON, inventories)
-            logger.info(f"Created inventory for {tribute_id}")
             return True
         except Exception as e:
             logger.error(f"Failed to create inventory for {tribute_id}: {e}")
