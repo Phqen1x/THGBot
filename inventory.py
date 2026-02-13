@@ -50,10 +50,11 @@ class Inventory:
 
     def _get_tribute(self, tribute_id: str) -> Optional[Dict]:
         """Get tribute inventory data or None if not found."""
-        return self.inv_data.get(tribute_id)
+        return self.inv_data.get(tribute_id.lower())
 
     def _ensure_tribute(self, tribute_id: str, capacity: int = 10) -> None:
         """Create tribute inventory if it doesn't exist."""
+        tribute_id = tribute_id.lower()
         if tribute_id not in self.inv_data:
             self.inv_data[tribute_id] = {
                 "capacity": capacity,
@@ -69,7 +70,7 @@ class Inventory:
 
     def _tribute_exists(self, tribute_id: str) -> bool:
         """Check if tribute exists in inventory system."""
-        return tribute_id in self.inv_data
+        return tribute_id.lower() in self.inv_data
 
     def get_inventory(self, tribute_id: str) -> Tuple[bool, Dict]:
         """
@@ -109,6 +110,7 @@ class Inventory:
         # Re-key items to maintain sequential numbering
         rekeyed_items = self._rekey_items(items_dict)
         
+        tribute_id = tribute_id.lower()
         self.inv_data[tribute_id]["items"] = rekeyed_items
         self.inv_data[tribute_id]["capacity"] = capacity
         self.save()
@@ -179,7 +181,8 @@ class Inventory:
         
         # Re-key to maintain sequential numbering
         items = self._rekey_items(items)
-        self.inv_data[tribute_id]["items"] = items
+        tribute_id_lower = tribute_id.lower()
+        self.inv_data[tribute_id_lower]["items"] = items
         self.save()
         
         return True, {
@@ -220,7 +223,8 @@ class Inventory:
         if not self._tribute_exists(tribute_id):
             return False, {"error": f"Error: Tribute ID not found in the system. No action taken."}
         
-        self.inv_data[tribute_id]["items"] = {}
+        tribute_id_lower = tribute_id.lower()
+        self.inv_data[tribute_id_lower]["items"] = {}
         self.save()
         
         return True, {"message": f"Inventory for {tribute_id} has been successfully cleared."}

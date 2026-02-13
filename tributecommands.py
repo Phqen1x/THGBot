@@ -6,6 +6,7 @@ Allows Gamemakers to create, view, and manage tribute records with all associate
 import discord
 from database import SQLDatabase
 from inventory import Inventory
+from confirmationview import ConfirmationView
 from typing import Optional
 import time
 import os
@@ -44,21 +45,45 @@ def register_tribute_commands(bot, db: SQLDatabase):
         except Exception as e:
             logger.error(f"Failed to log to channel: {e}")
     
+    async def get_category_channels(interaction: discord.Interaction, current: str):
+        """Autocomplete function to get channels from configured category."""
+        try:
+            guild_id = str(interaction.guild.id)
+            if guild_id not in bot.config or not bot.config[guild_id].get("category_id"):
+                return []
+            
+            category = interaction.guild.get_channel(bot.config[guild_id]["category_id"])
+            if not category or not isinstance(category, discord.CategoryChannel):
+                return []
+            
+            # Get all text channels in the category
+            channels = [ch for ch in category.channels if isinstance(ch, discord.TextChannel)]
+            
+            # Filter by current input
+            matching = [ch for ch in channels if current.lower() in ch.name.lower()]
+            
+            # Return as Choice objects for autocomplete
+            return [discord.app_commands.Choice(name=ch.name, value=str(ch.id)) for ch in matching[:25]]
+        except Exception as e:
+            logger.error(f"Error in get_category_channels: {e}")
+            return []
+    
     @bot.tree.command(name="create-tribute", description="Create a new tribute")
     @discord.app_commands.describe(
         tribute_id="Tribute ID (e.g., D1F, D1M)",
         tribute_name="Tribute name (e.g., John Doe)",
         user="Discord user to link to this tribute",
-        prompt_channel="Channel where prompts will be sent",
+        prompt_channel="Channel where prompts will be sent (must be in configured category)",
         inventory_capacity="Number of inventory slots (default: 10)",
         face_claim="(Optional) Image file or URL for character face claim"
     )
+    @discord.app_commands.autocomplete(prompt_channel=get_category_channels)
     async def create_tribute(
         interaction: discord.Interaction,
         tribute_id: str,
         tribute_name: str,
         user: discord.User,
-        prompt_channel: discord.TextChannel,
+        prompt_channel: str,
         inventory_capacity: int = 10,
         face_claim: Optional[discord.Attachment] = None
     ):
@@ -79,6 +104,45 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 f"❌ Invalid tribute ID format: `{tribute_id}`. Format should be like D1F, D1M, etc.",
                 ephemeral=True
             )
+            return
+        
+        # Validate and get channel
+        try:
+            prompt_channel_id = int(prompt_channel)
+            channel = interaction.guild.get_channel(prompt_channel_id)
+            
+            if not channel:
+                await interaction.response.send_message(
+                    "❌ Channel not found.",
+                    ephemeral=True
+                )
+                return
+            
+            if not isinstance(channel, discord.TextChannel):
+                await interaction.response.send_message(
+                    "❌ Prompt channel must be a text channel.",
+                    ephemeral=True
+                )
+                return
+            
+            # Validate channel is in configured category
+            guild_id = str(interaction.guild.id)
+            if guild_id in bot.config and bot.config[guild_id].get("category_id"):
+                category = interaction.guild.get_channel(bot.config[guild_id]["category_id"])
+                if category and channel.category_id != category.id:
+                    await interaction.response.send_message(
+                        f"❌ Prompt channel must be in the configured category.",
+                        ephemeral=True
+                    )
+                    return
+            
+        except (ValueError, AttributeError):
+            await interaction.response.send_message(
+                "❌ Invalid channel specified.",
+                ephemeral=True
+            )
+            return
+        
             return
         
         # Create user mention string
@@ -299,6 +363,28 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 )
                 return
             
+            # Show confirmation dialog
+            embed = discord.Embed(
+                title="⚠️ Confirm Tribute Deletion",
+                description=f"Are you sure you want to delete **{tribute['tribute_id']}** ({tribute['tribute_name']})?\n\n"
+                           f"This will permanently delete:\n"
+                           f"• Tribute record\n"
+                           f"• All inventory items\n"
+                           f"• Associated prompts\n"
+                           f"• All attached files",
+                color=discord.Color.orange()
+            )
+            embed.set_footer(text="This action cannot be undone!")
+            
+            view = ConfirmationView()
+            await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+            
+            # Wait for confirmation
+            await view.wait()
+            
+            if not view.confirmed:
+                return  # User cancelled
+            
             # Delete the tribute (cascades to inventory, prompts, files)
             db.delete_tribute(tribute_id)
             
@@ -315,8 +401,8 @@ def register_tribute_commands(bot, db: SQLDatabase):
             embed.add_field(name="Deleted Tribute", value=f"{tribute['tribute_id']} - {tribute['tribute_name']}")
             embed.description = "⚠️ All associated data (inventory, prompts, files) has been deleted."
             embed.set_footer(text=f"Deleted by {interaction.user.name}")
-             
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
             
             # Log the command execution
             await log_to_channel(
@@ -327,7 +413,7 @@ def register_tribute_commands(bot, db: SQLDatabase):
             )
              
         except Exception as e:
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"❌ Error: {str(e)}",
                 ephemeral=True
             )

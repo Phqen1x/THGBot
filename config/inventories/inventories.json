@@ -2,11 +2,14 @@
   "d1f": {
     "capacity": 10,
     "items": {
-      "1": "Meat",
-      "2": "MEATTT"
+      "1": "Meat (2/2 uses.) [Restores +2 Hunger.]"
     }
   },
   "d7f": {
+    "capacity": 10,
+    "items": {}
+  },
+  "d2f": {
     "capacity": 10,
     "items": {}
   }
