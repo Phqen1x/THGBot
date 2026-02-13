@@ -119,6 +119,25 @@ async def send_prompt_files(channel: discord.TextChannel, tribute_id: str, guild
         print(f"Error sending prompt files for {tribute_id}: {e}")
 
 
+async def send_prompt_files_ephemeral(interaction: discord.Interaction, tribute_id: str, guild_id: str):
+    """Send files associated with a prompt as ephemeral messages."""
+    try:
+        file_dir = os.path.join(bot.prompt_image_dir, guild_id)
+        if not os.path.exists(file_dir):
+            return
+        
+        # Find files for this tribute
+        for filename in os.listdir(file_dir):
+            if filename.startswith(f"{tribute_id}_"):
+                file_path = os.path.join(file_dir, filename)
+                try:
+                    await interaction.followup.send(file=discord.File(file_path), ephemeral=True)
+                except Exception as e:
+                    print(f"Error sending file {filename}: {e}")
+    except Exception as e:
+        print(f"Error sending prompt files for {tribute_id}: {e}")
+
+
 async def on_guild_join(guild):
     guild_id = str(guild.id)
     guild_prompts_dir = os.path.join(datadir, "prompt", str(guild_id))
@@ -450,7 +469,7 @@ async def viewPrompt(interaction: discord.Interaction, tribute_id: str):
             await interaction.followup.send(msg, ephemeral=True)
         
         # Send files
-        await send_prompt_files(interaction.channel, tribute_id, guild_id)
+        await send_prompt_files_ephemeral(interaction, tribute_id, guild_id)
         
         # Send inventory
         try:
