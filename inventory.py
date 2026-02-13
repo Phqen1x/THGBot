@@ -311,8 +311,15 @@ class Inventory:
     def create_tribute_inventory(
         self, tribute_id: str, capacity: int = 10, equipped_capacity: int = 5
     ) -> None:
-        """Create a new tribute inventory."""
-        self._ensure_tribute(tribute_id, capacity, equipped_capacity)
+        """Create a new tribute inventory, or update capacities if it exists."""
+        tribute_id = tribute_id.upper()
+        if tribute_id in self.inv_data:
+            # Update capacities if inventory already exists
+            self.inv_data[tribute_id]["capacity"] = capacity
+            self.inv_data[tribute_id]["equipped_capacity"] = equipped_capacity
+        else:
+            # Create new inventory
+            self._ensure_tribute(tribute_id, capacity, equipped_capacity)
         self.save()
 
     def delete_tribute_inventory(self, tribute_id: str) -> Tuple[bool, Dict]:
