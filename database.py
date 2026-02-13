@@ -81,7 +81,8 @@ class SQLDatabase:
                         user_mention TEXT NOT NULL,
                         guild_id INTEGER,
                         created_at INTEGER,
-                        face_claim_url TEXT
+                        face_claim_url TEXT,
+                        prompt_channel_id INTEGER
                     )
                 """)
                 
@@ -175,6 +176,16 @@ class SQLDatabase:
             except sqlite3.OperationalError as e:
                 logger.error(f"Failed to add face_claim_url column: {e}")
         
+        # Check if prompt_channel_id column exists in tributes table
+        if "prompt_channel_id" not in columns:
+            logger.info("Adding prompt_channel_id column to tributes table")
+            try:
+                cursor.execute("ALTER TABLE tributes ADD COLUMN prompt_channel_id INTEGER")
+                conn.commit()
+                logger.info("✓ Successfully added prompt_channel_id column")
+            except sqlite3.OperationalError as e:
+                logger.error(f"Failed to add prompt_channel_id column: {e}")
+        
         # Check if prompts table has prompt_id (old schema) - need to migrate to 1:1 relationship
         cursor.execute("PRAGMA table_info(prompts)")
         prompt_columns = [row[1] for row in cursor.fetchall()]
@@ -229,7 +240,8 @@ class SQLDatabase:
         user_mention: str,
         guild_id: Optional[int] = None,
         created_at: Optional[int] = None,
-        face_claim_url: Optional[str] = None
+        face_claim_url: Optional[str] = None,
+        prompt_channel_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """Create a new tribute."""
         import time
@@ -240,9 +252,9 @@ class SQLDatabase:
             with self.transaction() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    INSERT INTO tributes (tribute_id, tribute_name, user_id, user_mention, guild_id, created_at, face_claim_url)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (tribute_id, tribute_name, user_id, user_mention, guild_id, created_at, face_claim_url))
+                    INSERT INTO tributes (tribute_id, tribute_name, user_id, user_mention, guild_id, created_at, face_claim_url, prompt_channel_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (tribute_id, tribute_name, user_id, user_mention, guild_id, created_at, face_claim_url, prompt_channel_id))
                 
                 tribute_row_id = cursor.lastrowid
                 cursor.execute("SELECT * FROM tributes WHERE id = ?", (tribute_row_id,))

@@ -21,6 +21,8 @@ def register_tribute_commands(bot, db: SQLDatabase):
         tribute_id="Tribute ID (e.g., D1F, D1M)",
         tribute_name="Tribute name (e.g., John Doe)",
         user="Discord user to link to this tribute",
+        prompt_channel="Channel where prompts will be sent",
+        inventory_capacity="Number of inventory slots (default: 10)",
         face_claim="(Optional) Image file or URL for character face claim"
     )
     async def create_tribute(
@@ -28,9 +30,11 @@ def register_tribute_commands(bot, db: SQLDatabase):
         tribute_id: str,
         tribute_name: str,
         user: discord.User,
+        prompt_channel: discord.TextChannel,
+        inventory_capacity: int = 10,
         face_claim: Optional[discord.Attachment] = None
     ):
-        """Create a new tribute with ID, name, Discord user link, and optional face claim."""
+        """Create a new tribute with ID, name, Discord user link, channel, and optional face claim."""
         
         # Check Gamemaker role
         if not any(role.name == "Gamemaker" for role in interaction.user.roles):
@@ -65,13 +69,14 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 user_id=user.id,
                 user_mention=user_mention,
                 guild_id=guild_id,
-                face_claim_url=face_claim_url
+                face_claim_url=face_claim_url,
+                prompt_channel_id=prompt_channel.id
             )
             
-            # Auto-create empty inventory for this tribute
+            # Auto-create empty inventory for this tribute with specified capacity
             try:
-                bot.storage.create_inventory(tribute_id, capacity=10)
-                logger.info(f"Created inventory for tribute {tribute_id}")
+                bot.storage.create_inventory(tribute_id, capacity=inventory_capacity)
+                logger.info(f"Created inventory for tribute {tribute_id} with capacity {inventory_capacity}")
             except Exception as inv_err:
                 # Log but don't fail - tribute still created
                 logger.warning(f"Could not create inventory for {tribute_id}: {inv_err}")
@@ -89,6 +94,8 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 embed.add_field(name="Face Claim", value="✅ Attached", inline=False)
             if tribute['created_at']:
                 embed.add_field(name="Created", value=f"<t:{tribute['created_at']}>", inline=False)
+            embed.add_field(name="Prompt Channel", value=f"<#{prompt_channel.id}>", inline=True)
+            embed.add_field(name="Inventory Capacity", value=f"{inventory_capacity} slots", inline=True)
             embed.add_field(name="Inventory", value="✅ Empty inventory created", inline=False)
             embed.set_footer(text=f"Created by {interaction.user.name}")
             
@@ -256,6 +263,12 @@ def register_tribute_commands(bot, db: SQLDatabase):
             
             # Delete the tribute (cascades to inventory, prompts, files)
             db.delete_tribute(tribute_id)
+            
+            # Also delete from storage/JSON inventory
+            try:
+                bot.storage.clear_inventory(tribute_id)
+            except:
+                pass  # Storage cleanup non-critical
             
             embed = discord.Embed(
                 title="✅ Tribute Deleted",
