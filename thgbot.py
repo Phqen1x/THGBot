@@ -540,6 +540,10 @@ async def sendPrompt(interaction: discord.Interaction, tribute_id: str):
         
         # Send inventory alongside the prompt
         try:
+            # Get tribute name for display
+            tribute_data = bot.db.get_tribute(tribute_id)
+            tribute_name = tribute_data.get('tribute_name', tribute_id) if tribute_data else tribute_id
+            
             inventory_data = bot.storage.get_inventory(tribute_id)
             if inventory_data:
                 items = inventory_data.get('items', {})
@@ -555,7 +559,8 @@ async def sendPrompt(interaction: discord.Interaction, tribute_id: str):
                         capacity=capacity,
                         equipped=equipped,
                         equipped_capacity=equipped_capacity,
-                        title="Prompt Inventory"
+                        title="Inventory:",
+                        tribute_name=tribute_name
                     )
                     await channel.send(embed=inventory_embed)
         except Exception as e:
