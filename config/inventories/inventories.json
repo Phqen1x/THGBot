@@ -3,7 +3,8 @@
     "capacity": 10,
     "items": {
       "1": "Meat (2/2 uses.)",
-      "2": "Canteen (3/3 uses.)"
+      "2": "Canteen (3/3 uses.)",
+      "3": "Meat"
     }
   },
   "d7f": {

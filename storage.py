@@ -127,13 +127,15 @@ class StorageManager:
             return False
     
     def clear_inventory(self, tribute_id: str) -> bool:
-        """Clear all items from inventory in JSON storage."""
+        """Delete entire inventory entry for a tribute."""
         try:
             inventories = self.load_json_file(INVENTORIES_JSON)
-            if tribute_id.lower() not in inventories:
+            tribute_id_lower = tribute_id.lower()
+            if tribute_id_lower not in inventories:
                 return False
             
-            inventories[tribute_id.lower()]["items"] = {}
+            # Completely remove the tribute from inventories
+            del inventories[tribute_id_lower]
             self.save_json_file(INVENTORIES_JSON, inventories)
             return True
         except Exception as e:
