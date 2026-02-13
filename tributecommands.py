@@ -10,11 +10,39 @@ from typing import Optional
 import time
 import os
 import logging
+import datetime
 
 logger = logging.getLogger(__name__)
 
 def register_tribute_commands(bot, db: SQLDatabase):
     """Register all tribute commands with the bot."""
+    
+    async def log_to_channel(interaction: discord.Interaction, title: str, description: str, color=None):
+        """Helper function to send logs to the configured log channel."""
+        try:
+            guild_id = str(interaction.guild.id)
+            if guild_id not in bot.config or not bot.config[guild_id].get("log_channel_id"):
+                return
+            
+            log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
+            if not log_channel:
+                return
+            
+            log_embed = discord.Embed(
+                title=title,
+                description=description,
+                color=color or discord.Color.blue()
+            )
+            log_embed.set_author(
+                name=f"{interaction.user.name}",
+                icon_url=f"{interaction.user.avatar}"
+            )
+            if interaction.guild.icon:
+                log_embed.set_thumbnail(url=interaction.guild.icon.url)
+            log_embed.timestamp = datetime.datetime.now()
+            await log_channel.send(embed=log_embed)
+        except Exception as e:
+            logger.error(f"Failed to log to channel: {e}")
     
     @bot.tree.command(name="create-tribute", description="Create a new tribute")
     @discord.app_commands.describe(
@@ -101,6 +129,14 @@ def register_tribute_commands(bot, db: SQLDatabase):
             
             await interaction.response.send_message(embed=embed, ephemeral=True)
             
+            # Log the command execution
+            await log_to_channel(
+                interaction,
+                "📋 Tribute Created",
+                f"**{tribute['tribute_id']}** - {tribute['tribute_name']} ({tribute['user_mention']})\nCapacity: {inventory_capacity}",
+                discord.Color.green()
+            )
+            
         except Exception as e:
             if "UNIQUE constraint failed" in str(e):
                 await interaction.response.send_message(
@@ -128,7 +164,7 @@ def register_tribute_commands(bot, db: SQLDatabase):
         tribute_id = tribute_id.strip().upper()
         
         try:
-            tribute_data = db.get_tribute_full(tribute_id)
+            tribute_data = db.get_tribute(tribute_id)
             
             if not tribute_data:
                 await interaction.response.send_message(
@@ -152,36 +188,38 @@ def register_tribute_commands(bot, db: SQLDatabase):
             # Show selected sections or all
             show_all = show is None or show.lower() == "all"
             
-            # Inventory section
+            # Inventory section - get from storage manager
             if show_all or (show and "inventory" in show.lower()):
-                if tribute_data.get('inventory'):
-                    inv = tribute_data['inventory']
-                    items_str = "\n".join([f"#{num}: {name}" for num, name in inv['items'].items()]) if inv['items'] else "Empty"
+                inv_data = bot.storage.get_inventory(tribute_id)
+                if inv_data:
+                    items = inv_data.get('items', {})
+                    capacity = inv_data.get('capacity', 10)
+                    items_str = "\n".join([f"#{num}: {name}" for num, name in items.items()]) if items else "Empty"
                     embed.add_field(
-                        name=f"📦 Inventory (Capacity: {inv['capacity']})",
+                        name=f"📦 Inventory ({len(items)}/{capacity} items)",
                         value=items_str,
                         inline=False
                     )
             
             # Prompt section
             if show_all or (show and "prompt" in show.lower()):
-                if tribute_data.get('prompt'):
-                    prompt = tribute_data['prompt']
-                    prompt_text = prompt['message'][:1024] if len(prompt['message']) > 1024 else prompt['message']
+                prompt_data = bot.storage.get_prompt(tribute_id)
+                if prompt_data:
+                    prompt_text = prompt_data.get('message', '')
+                    prompt_text = prompt_text[:1024] if len(prompt_text) > 1024 else prompt_text
                     embed.add_field(
                         name="💬 Prompt",
                         value=prompt_text,
                         inline=False
                     )
-                    if prompt.get('created_at'):
-                        embed.add_field(name="Prompt Created", value=f"<t:{prompt['created_at']}>", inline=False)
             
-            # Files section
+            # Files section  
             if show_all or (show and "files" in show.lower()):
-                if tribute_data.get('files'):
-                    files_str = "\n".join([f"[{f['file_type']}] {f['file_path'].split('/')[-1]}" for f in tribute_data['files']])
+                files = db.get_files(tribute_id)
+                if files:
+                    files_str = "\n".join([f"[{f['file_type']}] {f['file_path'].split('/')[-1]}" for f in files])
                     embed.add_field(
-                        name=f"📁 Files ({len(tribute_data['files'])})",
+                        name=f"📁 Files ({len(files)})",
                         value=files_str,
                         inline=False
                     )
@@ -279,6 +317,14 @@ def register_tribute_commands(bot, db: SQLDatabase):
             embed.set_footer(text=f"Deleted by {interaction.user.name}")
              
             await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+            # Log the command execution
+            await log_to_channel(
+                interaction,
+                "🗑️ Tribute Deleted",
+                f"**{tribute['tribute_id']}** - {tribute['tribute_name']}\nAll associated data removed.",
+                discord.Color.red()
+            )
              
         except Exception as e:
             await interaction.response.send_message(
@@ -328,8 +374,8 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 
                 async def on_submit(self, modal_interaction: discord.Interaction) -> None:
                     try:
-                        # Get current channel as default
-                        channel_id = modal_interaction.channel.id if modal_interaction.channel else None
+                        # Use the tribute's assigned prompt channel
+                        channel_id = tribute.get('prompt_channel_id')
                         
                         # Create prompt in database
                         prompt = db.create_prompt(tribute_id, str(self.message), channel_id)
@@ -342,10 +388,18 @@ def register_tribute_commands(bot, db: SQLDatabase):
                         embed.add_field(name="Tribute", value=f"{tribute['tribute_id']} - {tribute['tribute_name']}", inline=False)
                         embed.add_field(name="Message", value=f"```\n{str(self.message)[:200]}\n```", inline=False)
                         if channel_id:
-                            embed.add_field(name="Channel", value=f"<#{channel_id}>", inline=False)
+                            embed.add_field(name="Will be sent to", value=f"<#{channel_id}>", inline=False)
                         embed.set_footer(text=f"Saved by {modal_interaction.user.name}")
                         
                         await modal_interaction.response.send_message(embed=embed, ephemeral=True)
+                        
+                        # Log the command execution
+                        await log_to_channel(
+                            modal_interaction,
+                            "💬 Prompt Saved",
+                            f"**{tribute['tribute_id']}** - {tribute['tribute_name']}\nMessage saved and ready to send.",
+                            discord.Color.blue()
+                        )
                     except Exception as e:
                         await modal_interaction.response.send_message(
                             f"❌ Error saving prompt: {str(e)}",
