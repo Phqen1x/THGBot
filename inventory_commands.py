@@ -85,6 +85,38 @@ def has_gamemaker_role(interaction: discord.Interaction) -> bool:
     return any(role.name == "Gamemaker" for role in interaction.user.roles)
 
 
+async def log_inventory_change(interaction: discord.Interaction, bot, tribute_id: str, action: str, item: str = None):
+    """Log inventory changes to the log channel."""
+    try:
+        guild_id = str(interaction.guild.id)
+        if guild_id not in bot.config or not bot.config[guild_id].get("log_channel_id"):
+            return
+        
+        log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
+        if not log_channel:
+            return
+        
+        # Get tribute name for better logging
+        tribute_data = bot.db.get_tribute(tribute_id)
+        tribute_name = tribute_data.get('tribute_name', tribute_id) if tribute_data else tribute_id
+        
+        # Build log message
+        if item:
+            description = f"**Tribute:** {tribute_id} ({tribute_name})\n**Action:** {action}\n**Item:** {item}\n**User:** {interaction.user.mention}"
+        else:
+            description = f"**Tribute:** {tribute_id} ({tribute_name})\n**Action:** {action}\n**User:** {interaction.user.mention}"
+        
+        log_embed = discord.Embed(
+            title="📦 Inventory Change",
+            description=description,
+            color=discord.Color.gold()
+        )
+        log_embed.timestamp = discord.utils.utcnow()
+        await log_channel.send(embed=log_embed)
+    except Exception as e:
+        print(f"Error logging inventory change: {e}")
+
+
 def register_inventory_commands(bot, inventory_manager):
     """Register inventory commands with the bot."""
 
@@ -187,6 +219,9 @@ def register_inventory_commands(bot, inventory_manager):
                 equipped_capacity=data.get("equipped_capacity"),
                 title=action,
             )
+            # Log the change
+            log_action = f"Added '{item}' to {'equipped' if equipped else 'inventory'}"
+            await log_inventory_change(interaction, bot, tribute_id, log_action, item)
         else:
             embed = _format_inventory_embed(
                 tribute_id, {}, 0, title="Add to Inventory", error=data["error"]
@@ -221,6 +256,8 @@ def register_inventory_commands(bot, inventory_manager):
                 equipped_capacity=data.get("equipped_capacity"),
                 title=f"Removed '{item}' from",
             )
+            # Log the change
+            await log_inventory_change(interaction, bot, tribute_id, f"Removed '{item}' from inventory", item)
         else:
             embed = _format_inventory_embed(
                 tribute_id, {}, 0, title="Remove from Inventory", error=data["error"]
@@ -281,6 +318,8 @@ def register_inventory_commands(bot, inventory_manager):
                 description=data["message"],
                 color=discord.Color.green(),
             )
+            # Log the change
+            await log_inventory_change(interaction, bot, tribute_id, "Cleared all inventory items")
         else:
             embed = discord.Embed(
                 title="Clear Inventory",
@@ -320,6 +359,9 @@ def register_inventory_commands(bot, inventory_manager):
                 title="Item Equipped",
             )
             embed.description = data.get("message")
+            # Log the change
+            item_name = data.get("equipped", {}).get(str(item_number), "Unknown Item")
+            await log_inventory_change(interaction, bot, tribute_id, f"Equipped item #{item_number}", item_name)
         else:
             embed = discord.Embed(
                 title="Equip Item", description=data["error"], color=discord.Color.red()
@@ -358,6 +400,9 @@ def register_inventory_commands(bot, inventory_manager):
                 title="Item Unequipped",
             )
             embed.description = data.get("message")
+            # Log the change
+            item_name = data.get("items", {}).get(str(item_number), "Unknown Item")
+            await log_inventory_change(interaction, bot, tribute_id, f"Unequipped item #{item_number}", item_name)
         else:
             embed = discord.Embed(
                 title="Unequip Item",
