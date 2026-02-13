@@ -717,153 +717,131 @@ async def sendAllPrompts(interaction: discord.Interaction):
 
 @bot.tree.command(name="clear-all-prompts", description="Clear all prompts")
 async def clearAllPrompts(interaction: discord.Interaction):
-    # Clears all the prompts
+    """Clear all prompts from all tributes in the guild."""
+    await interaction.response.defer(ephemeral=True)
+    
     try:
+        guild_id = interaction.guild.id if interaction.guild else None
+        tributes = bot.db.get_all_tributes(guild_id=guild_id)
+        
+        # Count valid prompts to clear
+        tributes_with_prompts = []
+        for tribute in tributes:
+            tribute_id = tribute.get('tribute_id')
+            prompt_data = bot.storage.get_prompt(tribute_id)
+            if prompt_data:
+                channel_id = prompt_data.get('channel_id') or prompt_data.get('channel')
+                if channel_id and interaction.guild.get_channel(int(channel_id)):
+                    tributes_with_prompts.append(tribute_id)
+        
+        if not tributes_with_prompts:
+            await interaction.followup.send("No prompts found to clear.", ephemeral=True)
+            return
+        
+        # Ask for confirmation
         confirmSend = ConfirmationView()
-        length = 0
-        for prompt_id in bot.prompt_info.keys():
-            if interaction.guild.get_channel(
-                int(bot.prompt_info[prompt_id]["channel"])
-            ):
-                length += 1
-        await interaction.response.send_message(
-            f"There are {length} prompts saved. Are you sure you want to delete all prompts?",
+        await interaction.followup.send(
+            f"There are {len(tributes_with_prompts)} prompts saved. Are you sure you want to delete all prompts?",
             ephemeral=True,
             view=confirmSend,
         )
         await confirmSend.wait()
-
-        prompts_to_del = []
-        guild_id = str(interaction.guild.id)
-        prompt_keys = []
-        prompt_mentions = []
-        for prompt_id in bot.prompt_info.keys():
-            if interaction.guild.get_channel(
-                int(bot.prompt_info[prompt_id]["channel"])
-            ):
-                prompt_keys.append(prompt_id)
-                prompt_mentions.append(f"<#{bot.prompt_info[prompt_id]['channel']}>")
-
-        log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
-        if length > 0:
-            log_embed = discord.Embed(
-                title=f"All prompts cleared.", color=discord.Color.red()
-            )
-            log_embed.add_field(
-                name="Prompt IDs", value=f"**{"\n".join(prompt_keys)}**", inline=True
-            )
-            log_embed.add_field(
-                name="Prompt channels",
-                value=f"{'\n'.join(prompt_mentions)}",
-                inline=True,
-            )
-            log_embed.set_author(
-                name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}"
-            )
-            if interaction.guild.icon != None:
-                log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
-            log_embed.timestamp = datetime.datetime.now()
-
+        
         if confirmSend.confirmed:
-            for prompt_id in bot.prompt_info.keys():
-                if interaction.guild.get_channel(
-                    int(bot.prompt_info[prompt_id]["channel"])
-                ):
-                    prompts_to_del.append(prompt_id)
-
-            for prompt_id in prompts_to_del:
-                if "image" in bot.prompt_info[prompt_id].keys():
-                    if isinstance(bot.prompt_info[prompt_id]["image"], list):
-                        for image in bot.prompt_info[prompt_id]["image"]:
-                            file_name = image
-                            file_path = os.path.join(
-                                prompt_image_dir, guild_id, file_name
-                            )
-                            try:
-                                os.unlink(file_path)
-                            except FileNotFoundError:
-                                pass
-                    else:
-                        file_name = bot.prompt_info[prompt_id]["image"]
-                        file_path = os.path.join(prompt_image_dir, guild_id, file_name)
-                        try:
-                            os.unlink(file_path)
-                        except FileNotFoundError:
-                            pass
-                del bot.prompt_info[prompt_id]
-            bot.save()
+            # Delete all prompts
+            for tribute_id in tributes_with_prompts:
+                bot.storage.delete_prompt(tribute_id)
+                bot.db.delete_prompt(tribute_id)
+            
+            # Log the action
+            guild_id_str = str(interaction.guild.id)
+            if guild_id_str in bot.config and bot.config[guild_id_str].get("log_channel_id"):
+                log_channel = bot.get_channel(bot.config[guild_id_str]["log_channel_id"])
+                if log_channel:
+                    log_embed = discord.Embed(
+                        title="All prompts cleared.",
+                        color=discord.Color.red()
+                    )
+                    log_embed.add_field(
+                        name="Tribute IDs",
+                        value="\n".join(tributes_with_prompts),
+                        inline=False
+                    )
+                    log_embed.set_author(
+                        name=f"{interaction.user.name}",
+                        icon_url=f"{interaction.user.avatar}"
+                    )
+                    if interaction.guild.icon:
+                        log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
+                    log_embed.timestamp = discord.utils.utcnow()
+                    await log_channel.send(embed=log_embed)
+            
             msg = await interaction.original_response()
-            await interaction.followup.edit_message(
-                msg.id, content="Prompts cleared", view=confirmSend
-            )
-            await log_channel.send(embed=log_embed)
+            await interaction.followup.edit_message(msg.id, content="✅ All prompts cleared.", view=confirmSend)
         else:
-            await interaction.followup.send("Cancelled clearing all prompts!")
+            msg = await interaction.original_response()
+            await interaction.followup.edit_message(msg.id, content="❌ Cancelled clearing all prompts.", view=confirmSend)
     except Exception as e:
-        print(e)
-        await interaction.response.send_message("Prompts not cleared", ephemeral=True)
+        print(f"Error clearing all prompts: {e}")
+        await interaction.followup.send("Error clearing prompts.", ephemeral=True)
 
 
 @bot.tree.command(name="clear-prompt", description="Clear a specific prompt")
-async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
-    # Clears a specific prompt
-    prompt_id_key = prompt_id.upper().strip().replace(" ", "_")
-    if prompt_id_key in bot.prompt_info.keys():
+async def clear_prompt(interaction: discord.Interaction, tribute_id: str):
+    """Clear prompt for a specific tribute."""
+    await interaction.response.defer(ephemeral=True)
+    
+    tribute_id = tribute_id.strip().upper()
+    
+    try:
+        # Check if prompt exists
+        prompt_data = bot.storage.get_prompt(tribute_id)
+        if not prompt_data:
+            await interaction.followup.send(
+                f"No prompt found for tribute `{tribute_id}`.", ephemeral=True
+            )
+            return
+        
+        # Ask for confirmation
         confirmSend = ConfirmationView()
-        await interaction.response.send_message(
-            f"Are you sure you want to delete the {prompt_id_key} prompt?",
+        await interaction.followup.send(
+            f"Are you sure you want to delete the {tribute_id} prompt?",
             ephemeral=True,
             view=confirmSend,
         )
         await confirmSend.wait()
-
-        guild_id = str(interaction.guild.id)
-        log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
-        log_embed = discord.Embed(
-            title=f"{prompt_id_key} prompt cleared.", color=discord.Color.red()
-        )
-        log_embed.set_author(
-            name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}"
-        )
-        if interaction.guild.icon != None:
-            log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
-        log_embed.timestamp = datetime.datetime.now()
-
+        
         if confirmSend.confirmed:
-            if "image" in bot.prompt_info[prompt_id_key].keys():
-                if isinstance(bot.prompt_info[prompt_id_key]["image"], list):
-                    for image in bot.prompt_info[prompt_id_key]["image"]:
-                        file_name = bot.prompt_info[prompt_id_key]["image"]
-                        file_path = os.path.join(prompt_image_dir, guild_id, file_name)
-                        try:
-                            os.unlink(file_path)
-                        except FileNotFoundError:
-                            pass
-                else:
-                    file_name = bot.prompt_info[prompt_id_key]["image"]
-                    file_path = os.path.join(prompt_image_dir, guild_id, file_name)
-                    try:
-                        os.unlink(file_path)
-                    except FileNotFoundError:
-                        pass
-            del bot.prompt_info[prompt_id_key]
-            bot.save()
+            # Delete the prompt from storage and database
+            bot.storage.delete_prompt(tribute_id)
+            bot.db.delete_prompt(tribute_id)
+            
+            # Log the action
+            guild_id = str(interaction.guild.id)
+            if guild_id in bot.config and bot.config[guild_id].get("log_channel_id"):
+                log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
+                if log_channel:
+                    log_embed = discord.Embed(
+                        title=f"{tribute_id} prompt cleared.",
+                        color=discord.Color.red()
+                    )
+                    log_embed.set_author(
+                        name=f"{interaction.user.name}",
+                        icon_url=f"{interaction.user.avatar}"
+                    )
+                    if interaction.guild.icon:
+                        log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
+                    log_embed.timestamp = discord.utils.utcnow()
+                    await log_channel.send(embed=log_embed)
+            
             msg = await interaction.original_response()
-            await interaction.followup.edit_message(
-                msg.id, content=f"Prompt {prompt_id_key} cleared.", view=confirmSend
-            )
-            await log_channel.send(embed=log_embed)
+            await interaction.followup.edit_message(msg.id, content=f"✅ Prompt for {tribute_id} cleared.", view=confirmSend)
         else:
             msg = await interaction.original_response()
-            await interaction.followup.edit_message(
-                msg.id,
-                content=f"Cancelled clearing the {prompt_id_key} prompt!",
-                view=confirmSend,
-            )
-    else:
-        await interaction.response.send_message(
-            "This prompt was not found in this server.", ephemeral=True
-        )
+            await interaction.followup.edit_message(msg.id, content=f"❌ Cancelled clearing the {tribute_id} prompt.", view=confirmSend)
+    except Exception as e:
+        print(f"Error clearing prompt for {tribute_id}: {e}")
+        await interaction.followup.send("Error clearing prompt.", ephemeral=True)
 
 
 @bot.tree.command(
