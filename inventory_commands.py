@@ -285,14 +285,17 @@ def register_inventory_commands(bot, inventory_manager):
             title=f"Search Results: '{item}'", color=discord.Color.blue()
         )
 
-        tributes = data.get("tributes", [])
-        if tributes:
-            tribute_list = "\n".join(tributes)
+        results = data.get("results", [])
+        if results:
+            # Format results as tribute_id - item_name
+            result_lines = [f"**{tribute_id}**: {item_name}" for tribute_id, item_name in results]
+            result_text = "\n".join(result_lines)
             embed.add_field(
-                name="Tributes with this item", value=tribute_list, inline=False
+                name="Tributes with matching items", value=result_text, inline=False
             )
+            embed.set_footer(text=f"Found {len(results)} matching item(s)")
         else:
-            embed.description = "No tributes found with this item."
+            embed.description = "No tributes found with items containing that search term."
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 

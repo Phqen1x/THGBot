@@ -267,22 +267,31 @@ class Inventory:
 
     def search_inventories(self, item: str) -> Tuple[bool, Dict]:
         """
-        Search all inventories for an item.
+        Search all inventories for items containing the search phrase.
 
         Args:
-            item: Item to search for
+            item: Search phrase (case-insensitive, partial match)
 
         Returns:
-            (success: bool, data: dict with 'tributes' list or empty)
+            (success: bool, data: dict with 'results' list of (tribute_id, item_name) tuples or empty)
         """
-        tributes_with_item = []
+        results = []
+        search_lower = item.lower()
 
         for tribute_id, tribute_data in self.inv_data.items():
+            # Search in inventory items
             items = tribute_data.get("items", {})
-            if item in items.values():
-                tributes_with_item.append(tribute_id)
+            for item_name in items.values():
+                if search_lower in item_name.lower():
+                    results.append((tribute_id, item_name))
+            
+            # Search in equipped items
+            equipped = tribute_data.get("equipped", {})
+            for item_name in equipped.values():
+                if search_lower in item_name.lower():
+                    results.append((tribute_id, item_name))
 
-        return True, {"tributes": tributes_with_item}
+        return True, {"results": results}
 
     def clear_inventory(self, tribute_id: str) -> Tuple[bool, Dict]:
         """

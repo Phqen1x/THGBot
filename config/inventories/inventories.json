@@ -21,10 +21,7 @@
   },
   "D1F": {
     "capacity": 1,
-    "items": {
-      "1": "Test",
-      "2": "Test Over Cap"
-    },
+    "items": {},
     "equipped_capacity": 1,
     "equipped": {
       "1": "Test"

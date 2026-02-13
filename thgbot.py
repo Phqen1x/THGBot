@@ -100,6 +100,25 @@ register_inventory_commands(bot, bot.inventory)
 register_tribute_commands(bot, bot.db)
 
 
+async def send_prompt_files(channel: discord.TextChannel, tribute_id: str, guild_id: str):
+    """Send files associated with a prompt to the channel."""
+    try:
+        file_dir = os.path.join(bot.prompt_image_dir, guild_id)
+        if not os.path.exists(file_dir):
+            return
+        
+        # Find files for this tribute
+        for filename in os.listdir(file_dir):
+            if filename.startswith(f"{tribute_id}_"):
+                file_path = os.path.join(file_dir, filename)
+                try:
+                    await channel.send(file=discord.File(file_path))
+                except Exception as e:
+                    print(f"Error sending file {filename}: {e}")
+    except Exception as e:
+        print(f"Error sending prompt files for {tribute_id}: {e}")
+
+
 async def on_guild_join(guild):
     guild_id = str(guild.id)
     guild_prompts_dir = os.path.join(datadir, "prompt", str(guild_id))
@@ -429,6 +448,40 @@ async def viewPrompt(interaction: discord.Interaction, tribute_id: str):
         await interaction.response.send_message(messages[0], ephemeral=True)
         for msg in messages[1:]:
             await interaction.followup.send(msg, ephemeral=True)
+        
+        # Send files
+        await send_prompt_files(interaction.channel, tribute_id, guild_id)
+        
+        # Send inventory
+        try:
+            tribute_data = bot.db.get_tribute(tribute_id)
+            tribute_name = (
+                tribute_data.get("tribute_name", tribute_id)
+                if tribute_data
+                else tribute_id
+            )
+            
+            inventory_data = bot.storage.get_inventory(tribute_id)
+            if inventory_data:
+                items = inventory_data.get("items", {})
+                equipped = inventory_data.get("equipped", {})
+                capacity = inventory_data.get("capacity", 10)
+                equipped_capacity = inventory_data.get("equipped_capacity", 5)
+                
+                # Send if there are items or equipped items
+                if items or equipped:
+                    inventory_embed = _format_inventory_embed(
+                        tribute_id=tribute_id,
+                        items=items,
+                        capacity=capacity,
+                        equipped=equipped,
+                        equipped_capacity=equipped_capacity,
+                        title="Inventory:",
+                        tribute_name=tribute_name,
+                    )
+                    await interaction.followup.send(embed=inventory_embed, ephemeral=True)
+        except Exception as e:
+            print(f"Failed to send inventory for {tribute_id}: {e}")
     else:
         await interaction.response.send_message("Prompt is empty", ephemeral=True)
 
@@ -545,6 +598,9 @@ async def sendPrompt(interaction: discord.Interaction, tribute_id: str):
             f"Prompt {tribute_id} sent in channel {channel.mention}", ephemeral=True
         )
         await log_channel.send(embed=log_embed)
+        
+        # Send files
+        await send_prompt_files(channel, tribute_id, guild_id)
 
         # Send inventory alongside the prompt
         try:
