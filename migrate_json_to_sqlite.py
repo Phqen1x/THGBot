@@ -1,7 +1,16 @@
 """
-Migration script: Converts existing JSON data to SQLite database.
-Creates tributes from JSON keys and migrates all data with referential integrity.
-Run BEFORE deploying the new system.
+[DEPRECATED] Migration script: Converts existing JSON data to SQLite database.
+
+NOTE: This script is no longer used. The system has consolidated to use ONLY
+the JSON storage layer (bot.storage manager) for inventory management. The SQLite
+inventories and inventory_items tables have been removed.
+
+This file is kept for historical reference only.
+
+Historical purpose:
+- Converted existing JSON data to SQLite database
+- Created tributes from JSON keys and migrated all data with referential integrity
+- Was run before deploying the new system
 """
 
 import os

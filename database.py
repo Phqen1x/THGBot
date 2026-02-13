@@ -86,30 +86,6 @@ class SQLDatabase:
                     )
                 """)
                 
-                # Create inventories table
-                cursor.execute("""
-                    CREATE TABLE inventories (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        tribute_id TEXT NOT NULL UNIQUE,
-                        capacity INTEGER DEFAULT 10,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE
-                    )
-                """)
-                
-                # Create inventory_items table
-                cursor.execute("""
-                    CREATE TABLE inventory_items (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        tribute_id TEXT NOT NULL,
-                        item_number INTEGER NOT NULL,
-                        item_name TEXT NOT NULL,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE,
-                        UNIQUE(tribute_id, item_number)
-                    )
-                """)
                 
                 # Create prompts table (1:1 with tributes - one prompt per tribute)
                 cursor.execute("""
@@ -148,8 +124,6 @@ class SQLDatabase:
                 # Create indexes
                 cursor.execute("CREATE INDEX idx_tributes_tribute_id ON tributes(tribute_id)")
                 cursor.execute("CREATE INDEX idx_tributes_user_id ON tributes(user_id)")
-                cursor.execute("CREATE INDEX idx_inventories_tribute_id ON inventories(tribute_id)")
-                cursor.execute("CREATE INDEX idx_inventory_items_tribute_id ON inventory_items(tribute_id)")
                 cursor.execute("CREATE INDEX idx_prompts_tribute_id ON prompts(tribute_id)")
                 cursor.execute("CREATE INDEX idx_files_tribute_id ON files(tribute_id)")
                 
@@ -325,17 +299,6 @@ class SQLDatabase:
             
             result = dict(tribute)
             
-            # Get inventory
-            cursor.execute("SELECT * FROM inventories WHERE tribute_id = ?", (tribute_id,))
-            inv_row = cursor.fetchone()
-            if inv_row:
-                result['inventory'] = dict(inv_row)
-                cursor.execute("""
-                    SELECT item_number, item_name FROM inventory_items
-                    WHERE tribute_id = ? ORDER BY item_number
-                """, (tribute_id,))
-                result['inventory']['items'] = {str(row['item_number']): row['item_name'] for row in cursor.fetchall()}
-            
             # Get prompt
             cursor.execute("SELECT * FROM prompts WHERE tribute_id = ?", (tribute_id,))
             prompt_row = cursor.fetchone()
@@ -346,136 +309,6 @@ class SQLDatabase:
             result['files'] = [dict(row) for row in cursor.fetchall()]
             
             return result
-    
-    # INVENTORY CRUD OPERATIONS
-    
-    def create_inventory(self, tribute_id: str, capacity: int = 10) -> Dict[str, Any]:
-        """Create inventory for a tribute."""
-        with self._lock:
-            with self.transaction() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO inventories (tribute_id, capacity)
-                    VALUES (?, ?)
-                """, (tribute_id, capacity))
-                
-                cursor.execute("SELECT * FROM inventories WHERE tribute_id = ?", (tribute_id,))
-                row = cursor.fetchone()
-                return dict(row) if row else None
-    
-    def get_inventory(self, tribute_id: str) -> Optional[Dict[str, Any]]:
-        """Get inventory for a tribute."""
-        with self._lock:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM inventories WHERE tribute_id = ?", (tribute_id,))
-            row = cursor.fetchone()
-            return dict(row) if row else None
-    
-    def get_inventory_items(self, tribute_id: str) -> List[Dict[str, Any]]:
-        """Get all items for a tribute's inventory."""
-        with self._lock:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT item_number, item_name FROM inventory_items 
-                WHERE tribute_id = ? 
-                ORDER BY item_number
-            """, (tribute_id,))
-            return [dict(row) for row in cursor.fetchall()]
-    
-    def add_inventory_item(self, tribute_id: str, item_name: str) -> int:
-        """Add item to inventory, returns new item number."""
-        with self._lock:
-            with self.transaction() as conn:
-                cursor = conn.cursor()
-                # Get next item number
-                cursor.execute("""
-                    SELECT COALESCE(MAX(item_number), 0) + 1 as next_num
-                    FROM inventory_items
-                    WHERE tribute_id = ?
-                """, (tribute_id,))
-                next_num = cursor.fetchone()['next_num']
-                
-                cursor.execute("""
-                    INSERT INTO inventory_items (tribute_id, item_number, item_name)
-                    VALUES (?, ?, ?)
-                """, (tribute_id, next_num, item_name))
-                
-                # Update inventory updated_at
-                cursor.execute("""
-                    UPDATE inventories SET updated_at = CURRENT_TIMESTAMP
-                    WHERE tribute_id = ?
-                """, (tribute_id,))
-                
-                return next_num
-    
-    def remove_inventory_item(self, tribute_id: str, item_number: int) -> bool:
-        """Remove item from inventory and rekey remaining items."""
-        with self._lock:
-            with self.transaction() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    DELETE FROM inventory_items
-                    WHERE tribute_id = ? AND item_number = ?
-                """, (tribute_id, item_number))
-                
-                if cursor.rowcount == 0:
-                    return False
-                
-                # Rekey remaining items
-                cursor.execute("""
-                    SELECT * FROM inventory_items
-                    WHERE tribute_id = ?
-                    ORDER BY item_number
-                """, (tribute_id,))
-                items = cursor.fetchall()
-                
-                for idx, item in enumerate(items, 1):
-                    cursor.execute("""
-                        UPDATE inventory_items
-                        SET item_number = ?
-                        WHERE tribute_id = ? AND item_name = ?
-                    """, (idx, tribute_id, item['item_name']))
-                
-                # Update inventory updated_at
-                cursor.execute("""
-                    UPDATE inventories SET updated_at = CURRENT_TIMESTAMP
-                    WHERE tribute_id = ?
-                """, (tribute_id,))
-                
-                return True
-    
-    def clear_inventory(self, tribute_id: str) -> bool:
-        """Clear all items from inventory."""
-        with self._lock:
-            with self.transaction() as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    DELETE FROM inventory_items
-                    WHERE tribute_id = ?
-                """, (tribute_id,))
-                
-                cursor.execute("""
-                    UPDATE inventories SET updated_at = CURRENT_TIMESTAMP
-                    WHERE tribute_id = ?
-                """, (tribute_id,))
-                
-                return True
-    
-    def search_inventory_items(self, item_name: str) -> List[Dict[str, Any]]:
-        """Search for tributes with a specific item."""
-        with self._lock:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT t.tribute_id, t.tribute_name, t.user_mention, ii.item_number, ii.item_name
-                FROM inventory_items ii
-                JOIN tributes t ON ii.tribute_id = t.tribute_id
-                WHERE ii.item_name LIKE ?
-                ORDER BY t.tribute_id, ii.item_number
-            """, (f"%{item_name}%",))
-            return [dict(row) for row in cursor.fetchall()]
     
     # PROMPT CRUD OPERATIONS
     

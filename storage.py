@@ -52,66 +52,109 @@ class StorageManager:
     # INVENTORY OPERATIONS
     
     def get_inventory(self, tribute_id: str) -> Optional[Dict[str, Any]]:
-        """Get inventory from SQLite, fallback to JSON."""
-        # Try SQLite first
-        inventory = self.db.get_inventory(tribute_id)
-        if inventory:
-            items = self.db.get_inventory_items(tribute_id)
-            return {
-                "capacity": inventory['capacity'],
-                "items": {str(item['item_number']): item['item_name'] for item in items}
-            }
-        
-        # Fallback to JSON
-        if self.fallback_mode:
+        """Get inventory from JSON storage."""
+        try:
             inventories = self.load_json_file(INVENTORIES_JSON)
             if tribute_id.lower() in inventories:
-                logger.info(f"Inventory fallback: {tribute_id} from JSON")
                 return inventories[tribute_id.lower()]
-        
-        return None
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get inventory for {tribute_id}: {e}")
+            return None
     
     def create_inventory(self, tribute_id: str, capacity: int = 10) -> bool:
-        """Create inventory in SQLite (no JSON fallback for writes)."""
+        """Create inventory in JSON storage."""
         try:
-            self.db.create_inventory(tribute_id, capacity)
+            inventories = self.load_json_file(INVENTORIES_JSON)
+            if tribute_id.lower() in inventories:
+                logger.warning(f"Inventory already exists for {tribute_id}")
+                return True
+            
+            inventories[tribute_id.lower()] = {"capacity": capacity, "items": {}}
+            self.save_json_file(INVENTORIES_JSON, inventories)
+            logger.info(f"Created inventory for {tribute_id}")
             return True
         except Exception as e:
             logger.error(f"Failed to create inventory for {tribute_id}: {e}")
             return False
     
     def add_inventory_item(self, tribute_id: str, item_name: str) -> bool:
-        """Add item to inventory in SQLite."""
+        """Add item to inventory in JSON storage."""
         try:
-            self.db.add_inventory_item(tribute_id, item_name)
+            inventories = self.load_json_file(INVENTORIES_JSON)
+            if tribute_id.lower() not in inventories:
+                logger.warning(f"Inventory not found for {tribute_id}")
+                return False
+            
+            items = inventories[tribute_id.lower()].get("items", {})
+            next_num = max([int(k) for k in items.keys()] or [0]) + 1
+            items[str(next_num)] = item_name
+            inventories[tribute_id.lower()]["items"] = items
+            
+            self.save_json_file(INVENTORIES_JSON, inventories)
             return True
         except Exception as e:
             logger.error(f"Failed to add item to {tribute_id}: {e}")
             return False
     
     def remove_inventory_item(self, tribute_id: str, item_number: int) -> bool:
-        """Remove item from inventory in SQLite."""
+        """Remove item from inventory in JSON storage."""
         try:
-            return self.db.remove_inventory_item(tribute_id, item_number)
+            inventories = self.load_json_file(INVENTORIES_JSON)
+            if tribute_id.lower() not in inventories:
+                return False
+            
+            items = inventories[tribute_id.lower()].get("items", {})
+            if str(item_number) not in items:
+                return False
+            
+            del items[str(item_number)]
+            
+            # Rekey remaining items
+            rekeyed = {}
+            for idx, (_, item_name) in enumerate(sorted(items.items()), 1):
+                rekeyed[str(idx)] = item_name
+            
+            inventories[tribute_id.lower()]["items"] = rekeyed
+            self.save_json_file(INVENTORIES_JSON, inventories)
+            return True
         except Exception as e:
             logger.error(f"Failed to remove item from {tribute_id}: {e}")
             return False
     
     def clear_inventory(self, tribute_id: str) -> bool:
-        """Clear inventory in SQLite."""
+        """Clear all items from inventory in JSON storage."""
         try:
-            return self.db.clear_inventory(tribute_id)
+            inventories = self.load_json_file(INVENTORIES_JSON)
+            if tribute_id.lower() not in inventories:
+                return False
+            
+            inventories[tribute_id.lower()]["items"] = {}
+            self.save_json_file(INVENTORIES_JSON, inventories)
+            return True
         except Exception as e:
             logger.error(f"Failed to clear inventory for {tribute_id}: {e}")
             return False
     
     def search_inventory_items(self, item_name: str) -> List[Dict[str, Any]]:
-        """Search inventory items in SQLite."""
+        """Search for tributes with a specific item in JSON storage."""
         try:
-            return self.db.search_inventory_items(item_name)
+            results = []
+            inventories = self.load_json_file(INVENTORIES_JSON)
+            for tribute_id, inv_data in inventories.items():
+                items = inv_data.get("items", {})
+                for item_num, item in items.items():
+                    if item_name.lower() in item.lower():
+                        results.append({
+                            "tribute_id": tribute_id,
+                            "item_number": int(item_num),
+                            "item_name": item
+                        })
+            return results
         except Exception as e:
             logger.error(f"Failed to search for '{item_name}': {e}")
             return []
+
     
     # PROMPT OPERATIONS
     
