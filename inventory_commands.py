@@ -15,9 +15,13 @@ def _format_inventory_embed(
 ) -> discord.Embed:
     """Format inventory data as a Discord embed."""
     color = discord.Color.red() if error else discord.Color.blue()
-    
+
     # Use tribute_name in title if provided, otherwise use tribute_id
-    display_title = f"{tribute_name or tribute_id} {title}" if tribute_name else f"{title}: {tribute_id}"
+    display_title = (
+        f"{tribute_name or tribute_id}'s {title}"
+        if tribute_name
+        else f"{title}: {tribute_id}"
+    )
     embed = discord.Embed(title=display_title, color=color)
 
     if error:
@@ -27,8 +31,12 @@ def _format_inventory_embed(
     # Equipped section (displayed first)
     if equipped is not None:
         equipped_count = len(equipped)
-        equipped_label = f"⚔️ Equipped ({equipped_count}/{equipped_capacity})" if equipped_capacity else "⚔️ Equipped"
-        
+        equipped_label = (
+            f"⚔️ Equipped ({equipped_count}/{equipped_capacity})"
+            if equipped_capacity
+            else "⚔️ Equipped"
+        )
+
         if not equipped:
             embed.add_field(
                 name=equipped_label, value="*(No equipped items)*", inline=False
@@ -43,18 +51,16 @@ def _format_inventory_embed(
         if equipped_count > equipped_capacity:
             embed.add_field(
                 name="⚠️ WARNING",
-                value=f"Equipped capacity ({equipped_capacity}) has been exceeded.",
+                value=f"Equipped capacity ({equipped_capacity}) has been exceeded by {equipped_count-equipped_capacity} items. You must drop, use, or unequip at least {equipped_count-equipped_capacity} items next turn.",
                 inline=False,
             )
 
     # Items section
     item_count = len(items)
     item_label = f"📦 Inventory ({item_count}/{capacity})"
-    
+
     if not items:
-        embed.add_field(
-            name=item_label, value="*(Inventory is empty)*", inline=False
-        )
+        embed.add_field(name=item_label, value="*(Inventory is empty)*", inline=False)
     else:
         item_list = "\n".join(
             f"{key}. {value}"
@@ -65,7 +71,7 @@ def _format_inventory_embed(
     if item_count > capacity:
         embed.add_field(
             name="⚠️ WARNING",
-            value=f"Inventory capacity ({capacity}) has been exceeded.",
+            value=f"Inventory capacity ({capacity}) has been exceeded by {item_count-capacity} items. You must drop, use, or equip at least {item_count-capacity} items next turn.",
             inline=False,
         )
 

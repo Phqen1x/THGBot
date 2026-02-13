@@ -381,24 +381,24 @@ async def view_prompt_ids(interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
     guild_id = interaction.guild.id if interaction.guild else None
     tributes = bot.db.get_all_tributes(guild_id=guild_id)
-    
+
     tribute_ids = []
     for tribute in tributes:
-        tribute_id = tribute.get('tribute_id')
+        tribute_id = tribute.get("tribute_id")
         prompt_data = bot.storage.get_prompt(tribute_id)
         if prompt_data:
-            channel_id = prompt_data.get('channel_id') or prompt_data.get('channel')
+            channel_id = prompt_data.get("channel_id") or prompt_data.get("channel")
             if channel_id and interaction.guild.get_channel(int(channel_id)):
                 tribute_ids.append(f"{tribute_id} - <#{channel_id}>")
-    
+
     if not tribute_ids:
         await interaction.followup.send("No prompts found.", ephemeral=True)
         return
-    
+
     embed = discord.Embed(
         title="Tributes with Prompts",
         description="\n".join(tribute_ids),
-        color=discord.Color.blue()
+        color=discord.Color.blue(),
     )
     await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -407,18 +407,22 @@ async def view_prompt_ids(interaction: discord.Interaction):
 async def viewPrompt(interaction: discord.Interaction, tribute_id: str):
     tribute_id = tribute_id.strip().upper()
     guild_id = str(interaction.guild.id)
-    
+
     prompt_data = bot.storage.get_prompt(tribute_id)
     if not prompt_data:
-        await interaction.response.send_message(f"No prompt found for {tribute_id}", ephemeral=True)
+        await interaction.response.send_message(
+            f"No prompt found for {tribute_id}", ephemeral=True
+        )
         return
-    
-    channel_id = prompt_data.get('channel_id') or prompt_data.get('channel')
+
+    channel_id = prompt_data.get("channel_id") or prompt_data.get("channel")
     if not channel_id or not interaction.guild.get_channel(int(channel_id)):
-        await interaction.response.send_message("Channel not found for this prompt", ephemeral=True)
+        await interaction.response.send_message(
+            "Channel not found for this prompt", ephemeral=True
+        )
         return
-    
-    message = prompt_data.get('message', '')
+
+    message = prompt_data.get("message", "")
     messages = split_message(message)
     if messages:
         await interaction.response.send_message(messages[0], ephemeral=True)
@@ -460,7 +464,6 @@ async def save_prompt(
 """
 
 
-
 @bot.tree.command(
     name="add-to-prompt", description="Adds content to a prompt using a modal UI"
 )
@@ -481,23 +484,27 @@ async def sendPrompt(interaction: discord.Interaction, tribute_id: str):
 
     tribute_id = tribute_id.strip().upper()
     guild_id = str(interaction.guild.id)
-    
+
     # Get prompt from storage
     prompt_data = bot.storage.get_prompt(tribute_id)
     if not prompt_data:
-        await interaction.followup.send(f"Prompt not found for tribute {tribute_id}", ephemeral=True)
+        await interaction.followup.send(
+            f"Prompt not found for tribute {tribute_id}", ephemeral=True
+        )
         return
-    
-    channel_id = prompt_data.get('channel_id') or prompt_data.get('channel')
+
+    channel_id = prompt_data.get("channel_id") or prompt_data.get("channel")
     if not channel_id:
-        await interaction.followup.send(f"No channel specified for prompt {tribute_id}", ephemeral=True)
+        await interaction.followup.send(
+            f"No channel specified for prompt {tribute_id}", ephemeral=True
+        )
         return
-    
+
     channel = interaction.guild.get_channel(int(channel_id))
     if not channel:
         await interaction.followup.send("Channel not found", ephemeral=True)
         return
-    
+
     try:
         log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
         log_embed = discord.Embed(
@@ -510,12 +517,12 @@ async def sendPrompt(interaction: discord.Interaction, tribute_id: str):
         if interaction.guild.icon:
             log_embed.set_thumbnail(url=f"{interaction.guild.icon.url}")
         log_embed.timestamp = datetime.datetime.now()
-        
-        message_text = prompt_data.get('message', '')
+
+        message_text = prompt_data.get("message", "")
         if not message_text:
             await interaction.followup.send("Prompt message is empty", ephemeral=True)
             return
-        
+
         messages = split_message(message_text)
         first_message = True
         for msg in messages:
@@ -532,25 +539,29 @@ async def sendPrompt(interaction: discord.Interaction, tribute_id: str):
                                 await message.delete()
                                 break
                         break
-        
+
         await interaction.followup.send(
             f"Prompt {tribute_id} sent in channel {channel.mention}", ephemeral=True
         )
         await log_channel.send(embed=log_embed)
-        
+
         # Send inventory alongside the prompt
         try:
             # Get tribute name for display
             tribute_data = bot.db.get_tribute(tribute_id)
-            tribute_name = tribute_data.get('tribute_name', tribute_id) if tribute_data else tribute_id
-            
+            tribute_name = (
+                tribute_data.get("tribute_name", tribute_id)
+                if tribute_data
+                else tribute_id
+            )
+
             inventory_data = bot.storage.get_inventory(tribute_id)
             if inventory_data:
-                items = inventory_data.get('items', {})
-                equipped = inventory_data.get('equipped', {})
-                capacity = inventory_data.get('capacity', 10)
-                equipped_capacity = inventory_data.get('equipped_capacity', 5)
-                
+                items = inventory_data.get("items", {})
+                equipped = inventory_data.get("equipped", {})
+                capacity = inventory_data.get("capacity", 10)
+                equipped_capacity = inventory_data.get("equipped_capacity", 5)
+
                 # Only send if there are items or equipped items
                 if items or equipped:
                     inventory_embed = _format_inventory_embed(
@@ -560,14 +571,16 @@ async def sendPrompt(interaction: discord.Interaction, tribute_id: str):
                         equipped=equipped,
                         equipped_capacity=equipped_capacity,
                         title="Inventory:",
-                        tribute_name=tribute_name
+                        tribute_name=tribute_name,
                     )
                     await channel.send(embed=inventory_embed)
         except Exception as e:
             print(f"Failed to send inventory for {tribute_id}: {e}")
-        
+
     except Exception as e:
-        await interaction.followup.send(f"Error sending prompt: {str(e)}", ephemeral=True)
+        await interaction.followup.send(
+            f"Error sending prompt: {str(e)}", ephemeral=True
+        )
 
 
 @bot.tree.command(name="send-all-prompts", description="Send all prompts")
@@ -852,7 +865,9 @@ async def clear_prompt(interaction: discord.Interaction, prompt_id: str):
         )
 
 
-@bot.tree.command(name="add-file", description="Add a file to a specific tribute's prompt.")
+@bot.tree.command(
+    name="add-file", description="Add a file to a specific tribute's prompt."
+)
 async def add_file(
     interaction: discord.Interaction, tribute_id: str, file: discord.Attachment
 ):
@@ -896,26 +911,26 @@ async def add_file(
 
     try:
         await file.save(file_path)
-        
+
         await interaction.followup.send(
-            f"✅ File added to prompt `{tribute_id}`.",
-            ephemeral=True
+            f"✅ File added to prompt `{tribute_id}`.", ephemeral=True
         )
-        
+
         # Log the file addition
         log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
         if log_channel:
             log_embed = discord.Embed(
                 title=f"File added to {tribute_id}",
                 description=f"File: {file.filename}",
-                color=discord.Color.green()
+                color=discord.Color.green(),
             )
-            log_embed.set_author(name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}")
+            log_embed.set_author(
+                name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}"
+            )
             await log_channel.send(embed=log_embed)
     except Exception as e:
         await interaction.followup.send(
-            f"Error uploading file: {str(e)}",
-            ephemeral=True
+            f"Error uploading file: {str(e)}", ephemeral=True
         )
         print(f"Error uploading file: {e}")
 

@@ -22,11 +22,22 @@
   "D1F": {
     "capacity": 1,
     "items": {
-      "1": "Test"
+      "1": "Test",
+      "2": "Test Over Cap"
     },
     "equipped_capacity": 1,
     "equipped": {
       "1": "Test"
+    }
+  },
+  "D1M": {
+    "capacity": 10,
+    "items": {
+      "1": "Test Item"
+    },
+    "equipped_capacity": 5,
+    "equipped": {
+      "1": "Test Sword"
     }
   }
 }
