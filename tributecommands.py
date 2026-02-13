@@ -75,6 +75,7 @@ def register_tribute_commands(bot, db: SQLDatabase):
         user="Discord user to link to this tribute",
         prompt_channel="Channel where prompts will be sent (must be in configured category)",
         inventory_capacity="Number of inventory slots (default: 10)",
+        equipped_capacity="Number of equipped slots (default: 5)",
         face_claim="(Optional) Image file or URL for character face claim"
     )
     @discord.app_commands.autocomplete(prompt_channel=get_category_channels)
@@ -85,6 +86,7 @@ def register_tribute_commands(bot, db: SQLDatabase):
         user: discord.User,
         prompt_channel: str,
         inventory_capacity: int = 10,
+        equipped_capacity: int = 5,
         face_claim: Optional[discord.Attachment] = None
     ):
         """Create a new tribute with ID, name, Discord user link, channel, and optional face claim."""
@@ -167,9 +169,9 @@ def register_tribute_commands(bot, db: SQLDatabase):
             
             # Auto-create empty inventory for this tribute with specified capacity
             try:
-                bot.storage.create_inventory(tribute_id, capacity=inventory_capacity, equipped_capacity=5)
-                bot.inventory.create_tribute_inventory(tribute_id, capacity=inventory_capacity, equipped_capacity=5)
-                logger.info(f"Created inventory for tribute {tribute_id} with capacity {inventory_capacity}, equipped capacity 5")
+                bot.storage.create_inventory(tribute_id, capacity=inventory_capacity, equipped_capacity=equipped_capacity)
+                bot.inventory.create_tribute_inventory(tribute_id, capacity=inventory_capacity, equipped_capacity=equipped_capacity)
+                logger.info(f"Created inventory for tribute {tribute_id} with capacity {inventory_capacity}, equipped capacity {equipped_capacity}")
             except Exception as inv_err:
                 # Log but don't fail - tribute still created
                 logger.warning(f"Could not create inventory for {tribute_id}: {inv_err}")
@@ -189,6 +191,7 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 embed.add_field(name="Created", value=f"<t:{tribute['created_at']}>", inline=False)
             embed.add_field(name="Prompt Channel", value=f"<#{prompt_channel_id}>", inline=True)
             embed.add_field(name="Inventory Capacity", value=f"{inventory_capacity} slots", inline=True)
+            embed.add_field(name="Equipped Capacity", value=f"{equipped_capacity} slots", inline=True)
             embed.add_field(name="Inventory", value="✅ Empty inventory created", inline=False)
             embed.set_footer(text=f"Created by {interaction.user.name}")
             
@@ -262,17 +265,18 @@ def register_tribute_commands(bot, db: SQLDatabase):
                     capacity = inv_data.get('capacity', 10)
                     equipped_capacity = inv_data.get('equipped_capacity', 5)
                     
-                    items_str = "\n".join([f"#{num}: {name}" for num, name in items.items()]) if items else "Empty"
-                    embed.add_field(
-                        name=f"📦 Inventory ({len(items)}/{capacity} items)",
-                        value=items_str,
-                        inline=False
-                    )
-                    
+                    # Equipped first, then inventory
                     equipped_str = "\n".join([f"#{num}: {name}" for num, name in equipped.items()]) if equipped else "Empty"
                     embed.add_field(
                         name=f"⚔️ Equipped ({len(equipped)}/{equipped_capacity} items)",
                         value=equipped_str,
+                        inline=False
+                    )
+                    
+                    items_str = "\n".join([f"#{num}: {name}" for num, name in items.items()]) if items else "Empty"
+                    embed.add_field(
+                        name=f"📦 Inventory ({len(items)}/{capacity} items)",
+                        value=items_str,
                         inline=False
                     )
             
@@ -656,11 +660,17 @@ def register_tribute_commands(bot, db: SQLDatabase):
     
     @bot.tree.command(name="save-prompt", description="Save a prompt to a tribute")
     @discord.app_commands.describe(
-        tribute_id="Tribute ID to attach the prompt to"
+        tribute_id="Tribute ID to attach the prompt to",
+        file1="(Optional) First file attachment",
+        file2="(Optional) Second file attachment",
+        file3="(Optional) Third file attachment"
     )
     async def save_prompt(
         interaction: discord.Interaction,
-        tribute_id: str
+        tribute_id: str,
+        file1: Optional[discord.Attachment] = None,
+        file2: Optional[discord.Attachment] = None,
+        file3: Optional[discord.Attachment] = None
     ):
         """Save a prompt message to a specific tribute using a modal."""
         
@@ -684,6 +694,9 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 )
                 return
             
+            # Store files for use in modal
+            files = [f for f in [file1, file2, file3] if f is not None]
+            
             # Show modal for prompt message
             class PromptMessageModal(discord.ui.Modal, title="Prompt Message"):
                 message = discord.ui.TextInput(
@@ -702,6 +715,23 @@ def register_tribute_commands(bot, db: SQLDatabase):
                         # Create prompt in database
                         prompt = db.create_prompt(tribute_id, str(self.message), channel_id)
                         
+                        # Save files if provided
+                        if files:
+                            guild_id = str(interaction.guild.id)
+                            file_dir = os.path.join(bot.prompt_image_dir, guild_id)
+                            os.makedirs(file_dir, exist_ok=True)
+                            
+                            for file_attachment in files:
+                                # Validate file type
+                                valid_extensions = ('.png', '.jpg', '.jpeg', '.webp', '.webm', '.mp3')
+                                if not any(file_attachment.filename.endswith(ext) for ext in valid_extensions):
+                                    continue
+                                
+                                file_extension = os.path.splitext(file_attachment.filename)[1]
+                                new_filename = f"{tribute_id}_{int(time.time())}{file_extension}"
+                                file_path = os.path.join(file_dir, new_filename)
+                                await file_attachment.save(file_path)
+                        
                         # Confirmation embed
                         embed = discord.Embed(
                             title="✅ Prompt Saved",
@@ -711,6 +741,8 @@ def register_tribute_commands(bot, db: SQLDatabase):
                         embed.add_field(name="Message", value=f"```\n{str(self.message)[:200]}\n```", inline=False)
                         if channel_id:
                             embed.add_field(name="Will be sent to", value=f"<#{channel_id}>", inline=False)
+                        if files:
+                            embed.add_field(name="Files", value=f"{len(files)} file(s) attached", inline=False)
                         embed.set_footer(text=f"Saved by {modal_interaction.user.name}")
                         
                         await modal_interaction.response.send_message(embed=embed, ephemeral=True)

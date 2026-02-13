@@ -318,17 +318,24 @@ class SQLDatabase:
         message: str,
         channel_id: int
     ) -> Dict[str, Any]:
-        """Create a prompt for a tribute (1:1 relationship)."""
+        """Create or update a prompt for a tribute (1:1 relationship)."""
         import time
         created_at = int(time.time())
         
         with self._lock:
             with self.transaction() as conn:
                 cursor = conn.cursor()
+                # Try to update first
                 cursor.execute("""
-                    INSERT INTO prompts (tribute_id, message, channel_id, created_at)
-                    VALUES (?, ?, ?, ?)
-                """, (tribute_id, message, channel_id, created_at))
+                    UPDATE prompts SET message = ?, channel_id = ? WHERE tribute_id = ?
+                """, (message, channel_id, tribute_id))
+                
+                # If no rows were updated, insert
+                if cursor.rowcount == 0:
+                    cursor.execute("""
+                        INSERT INTO prompts (tribute_id, message, channel_id, created_at)
+                        VALUES (?, ?, ?, ?)
+                    """, (tribute_id, message, channel_id, created_at))
                 
                 cursor.execute("""
                     SELECT * FROM prompts WHERE tribute_id = ?

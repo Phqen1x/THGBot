@@ -30,36 +30,49 @@ async def send_inventory_for_tribute(channel, storage, tribute_id):
         print(f"Failed to send inventory for {tribute_id}: {e}")
 
 
-async def send_single_prompt(bot, interaction, prompt_id, guild_id, prompt_image_dir, storage=None, tribute_id=None):
+async def send_single_prompt(bot, interaction, tribute_id, guild_id, prompt_image_dir, storage=None):
     """
     Sends a single prompt to its designated channel.
 
     Args:
         bot: The bot instance
         interaction: The discord interaction
-        prompt_id: The ID of the prompt to send
+        tribute_id: The tribute ID whose prompt to send
         guild_id: The guild ID as a string
         prompt_image_dir: Directory where prompt images are stored
-        storage: Optional storage manager to send inventory with prompt
-        tribute_id: Optional tribute ID to send inventory for
+        storage: Storage manager to get prompt data
 
     Returns:
-        prompt_id if successful, None otherwise
+        tribute_id if successful, None otherwise
     """
-    if not interaction.guild.get_channel(int(bot.prompt_info[prompt_id]["channel"])):
+    if not storage:
         return None
-
-    channel_id = bot.prompt_info[prompt_id]["channel"]
+    
+    # Get prompt from storage using tribute_id
+    prompt_data = storage.get_prompt(tribute_id)
+    if not prompt_data:
+        print(f"No prompt found for {tribute_id}")
+        return None
+    
+    channel_id = prompt_data.get('channel_id') or prompt_data.get('channel')
+    if not channel_id:
+        print(f"No channel specified for prompt {tribute_id}")
+        return None
+    
     channel = interaction.guild.get_channel(int(channel_id))
     if not channel:
         await interaction.followup.send(
-            f"Channel {channel} does not exist", ephemeral=True
+            f"Channel {channel_id} does not exist", ephemeral=True
         )
-        print(f"Channel {channel} does not exist")
+        print(f"Channel {channel_id} does not exist")
         return None
 
     try:
-        message = bot.prompt_info[prompt_id]["message"]
+        message = prompt_data.get('message', '')
+        if not message:
+            print(f"No message found for prompt {tribute_id}")
+            return None
+            
         messages = split_message(message)
         first_message = True
 
@@ -80,43 +93,11 @@ async def send_single_prompt(bot, interaction, prompt_id, guild_id, prompt_image
                                 break
                         break
 
-        # Handle image attachments
-        if "image" in bot.prompt_info[prompt_id].keys():
-            if isinstance(bot.prompt_info[prompt_id]["image"], list):
-                for image in bot.prompt_info[prompt_id]["image"]:
-                    file_name = image
-                    file_path = os.path.join(prompt_image_dir, guild_id, file_name)
-                    if os.path.exists(file_path):
-                        await channel.send(file=discord.File(file_path))
-                        try:
-                            os.unlink(file_path)
-                        except FileNotFoundError:
-                            pass
-                    else:
-                        await interaction.followup.send(
-                            "File is missing, please reattach the file.",
-                            ephemeral=True,
-                        )
-            else:
-                file_name = bot.prompt_info[prompt_id]["image"]
-                file_path = os.path.join(prompt_image_dir, guild_id, file_name)
-                if os.path.exists(file_path):
-                    await channel.send(file=discord.File(file_path))
-                    try:
-                        os.unlink(file_path)
-                    except FileNotFoundError:
-                        pass
-                else:
-                    await interaction.followup.send(
-                        "File is missing, please reattach the file.",
-                        ephemeral=True,
-                    )
-
         # Send associated inventory if provided
         if storage and tribute_id:
             await send_inventory_for_tribute(channel, storage, tribute_id)
 
-        return prompt_id  # Return the prompt_id if successful
+        return tribute_id  # Return the tribute_id if successful
 
     except discord.Forbidden:
         await interaction.followup.send(
@@ -139,34 +120,35 @@ async def send_all_prompts_concurrent(bot, interaction, guild_id, prompt_image_d
         interaction: The discord interaction
         guild_id: The guild ID as a string
         prompt_image_dir: Directory where prompt images are stored
-        storage: Optional storage manager to send inventory with prompts
+        storage: Storage manager to get prompts
 
     Returns:
-        List of successfully sent prompt IDs
+        List of successfully sent tribute IDs
     """
-    # Create tasks for all prompts
+    if not storage:
+        return []
+    
+    # Get all tributes and their prompts
     tasks = []
-    for prompt_id in bot.prompt_info.keys():
-        if interaction.guild.get_channel(int(bot.prompt_info[prompt_id]["channel"])):
-            # Try to get tribute_id if storage is available
-            tribute_id = None
-            if storage:
-                # In the new schema, prompt_id may be a tribute_id
-                try:
-                    tribute_id = prompt_id
-                except:
-                    pass
-            
-            tasks.append(
-                send_single_prompt(
-                    bot, interaction, prompt_id, guild_id, prompt_image_dir, storage, tribute_id
+    tributes = bot.db.get_all_tributes(guild_id=interaction.guild.id)
+    
+    for tribute in tributes:
+        tribute_id = tribute.get('tribute_id')
+        prompt_data = storage.get_prompt(tribute_id)
+        
+        if prompt_data:
+            channel_id = prompt_data.get('channel_id') or prompt_data.get('channel')
+            if channel_id and interaction.guild.get_channel(int(channel_id)):
+                tasks.append(
+                    send_single_prompt(
+                        bot, interaction, tribute_id, guild_id, prompt_image_dir, storage
+                    )
                 )
-            )
 
     # Execute all tasks concurrently
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # Collect successfully sent prompts
+    # Collect successfully sent tributes
     prompts_to_del = []
     for result in results:
         if result and not isinstance(result, Exception):

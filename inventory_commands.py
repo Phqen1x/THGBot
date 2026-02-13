@@ -23,30 +23,13 @@ def _format_inventory_embed(
         embed.description = error
         return embed
 
-    # Items section
-    if not items:
-        embed.add_field(name="Items", value="*(Inventory is empty)*", inline=False)
-    else:
-        item_list = "\n".join(f"{key}. {value}" for key, value in sorted(items.items(), key=lambda x: int(x[0])))
-        embed.add_field(name="Items", value=item_list, inline=False)
-
-    item_count = len(items)
-    embed.add_field(name="Item Count", value=f"{item_count}/{capacity}", inline=True)
-
-    if item_count > capacity:
-        embed.add_field(
-            name="⚠️ WARNING",
-            value=f"Inventory capacity ({capacity}) has been exceeded.",
-            inline=False
-        )
-
-    # Equipped section
+    # Equipped section (displayed first)
     if equipped is not None:
         if not equipped:
-            embed.add_field(name="Equipped", value="*(No equipped items)*", inline=False)
+            embed.add_field(name="⚔️ Equipped", value="*(No equipped items)*", inline=False)
         else:
             equipped_list = "\n".join(f"{key}. {value}" for key, value in sorted(equipped.items(), key=lambda x: int(x[0])))
-            embed.add_field(name="Equipped", value=equipped_list, inline=False)
+            embed.add_field(name="⚔️ Equipped", value=equipped_list, inline=False)
         
         equipped_count = len(equipped)
         if equipped_capacity:
@@ -57,6 +40,23 @@ def _format_inventory_embed(
                     value=f"Equipped capacity ({equipped_capacity}) has been exceeded.",
                     inline=False
                 )
+
+    # Items section
+    if not items:
+        embed.add_field(name="📦 Inventory", value="*(Inventory is empty)*", inline=False)
+    else:
+        item_list = "\n".join(f"{key}. {value}" for key, value in sorted(items.items(), key=lambda x: int(x[0])))
+        embed.add_field(name="📦 Inventory", value=item_list, inline=False)
+
+    item_count = len(items)
+    embed.add_field(name="Inventory Count", value=f"{item_count}/{capacity}", inline=True)
+
+    if item_count > capacity:
+        embed.add_field(
+            name="⚠️ WARNING",
+            value=f"Inventory capacity ({capacity}) has been exceeded.",
+            inline=False
+        )
 
     return embed
 

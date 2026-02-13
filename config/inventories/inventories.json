@@ -1,12 +1,4 @@
 {
-  "d1f": {
-    "capacity": 10,
-    "items": {
-      "1": "Meat (2/2 uses.)",
-      "2": "Canteen (3/3 uses.)",
-      "3": "Meat"
-    }
-  },
   "d7f": {
     "capacity": 10,
     "items": {}
@@ -17,6 +9,24 @@
   },
   "d1m": {
     "capacity": 10,
-    "items": {}
+    "items": {
+      "1": "meat"
+    }
+  },
+  "d1f": {
+    "capacity": 1,
+    "items": {},
+    "equipped_capacity": 5,
+    "equipped": {}
+  },
+  "D1F": {
+    "capacity": 1,
+    "items": {
+      "1": "Test"
+    },
+    "equipped_capacity": 1,
+    "equipped": {
+      "1": "Test"
+    }
   }
 }

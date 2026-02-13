@@ -14,26 +14,20 @@ prompt_image_dir = os.path.join(datadir, "prompt_images")
 
 class AddToPromptModal(discord.ui.Modal):
     def __init__(self, interaction: discord.Interaction, bot=None):
-        super().__init__(title="Prompt Addendum")
+        super().__init__(title="Add to Prompt")
         self.interaction = interaction
         self.bot = bot
         self.guild_id = str(interaction.guild.id)
-        self.channels = [
-            channel
-            for channel in interaction.guild.channels
-            if isinstance(channel, discord.TextChannel)
-            and channel.category_id == self.bot.config[self.guild_id]["category_id"]
-        ]
         self.add_item(
             discord.ui.TextInput(
-                label="Prompt ID",
-                placeholder="Enter the prompt id",
-                custom_id="prompt_id",
+                label="Tribute ID",
+                placeholder="Enter the tribute ID (e.g., D1F)",
+                custom_id="tribute_id",
             )
         )
         self.add_item(
             discord.ui.TextInput(
-                label="Prompt Addendum",
+                label="Prompt Addition",
                 placeholder="Enter your prompt addition",
                 custom_id="prompt_addendum",
                 style=discord.TextStyle.paragraph,
@@ -42,16 +36,30 @@ class AddToPromptModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            prompt_id = self.children[0].value.upper().strip().replace(" ", "_")
-            prompt = self.children[1].value
-            if prompt_id not in self.bot.prompt_info.keys():
-                self.bot.prompt_info[prompt_id] = {"message": ""}
-            self.bot.prompt_info[prompt_id]["message"] += f"\n\n{prompt}"
+            tribute_id = self.children[0].value.upper().strip()
+            prompt_addendum = self.children[1].value
+            
+            # Get existing prompt
+            prompt_data = self.bot.storage.get_prompt(tribute_id)
+            if not prompt_data:
+                await interaction.response.send_message(
+                    f"No prompt found for tribute {tribute_id}", ephemeral=True
+                )
+                return
+            
+            # Update prompt message
+            current_message = prompt_data.get('message', '')
+            updated_message = f"{current_message}\n\n{prompt_addendum}"
+            channel_id = prompt_data.get('channel_id') or prompt_data.get('channel')
+            
+            self.bot.storage.update_prompt(tribute_id, message=updated_message, channel_id=channel_id)
+            self.bot.db.update_prompt(tribute_id, message=updated_message)
+            
             log_channel = self.bot.get_channel(
                 self.bot.config[self.guild_id]["log_channel_id"]
             )
             log_embed = discord.Embed(
-                title=f"{prompt_id} prompt has been added to.",
+                title=f"{tribute_id} prompt has been added to.",
                 color=discord.Color.green(),
             )
             log_embed.set_author(
@@ -59,47 +67,18 @@ class AddToPromptModal(discord.ui.Modal):
             )
             log_embed.set_thumbnail(url=f"{interaction.user.avatar}")
             log_embed.timestamp = datetime.datetime.now()
-            if any(
-                channel.id == self.bot.config[self.guild_id]["log_channel_id"]
-                for channel in self.interaction.guild.channels
-            ):
+            
+            if log_channel:
                 await log_channel.send(embed=log_embed)
-                messages = split_message(prompt)
+                messages = split_message(prompt_addendum)
                 for message in messages:
                     await log_channel.send(message)
-                channel_id = self.bot.prompt_info[prompt_id]["channel"]
-                """if self.file and channel_id:
-                    if (
-                        self.file.filename.lower().endswith(".png")
-                        or self.file.filename.lower().endswith(".jpg")
-                        or self.file.filename.lower().endswith(".jpeg")
-                        or self.file.filename.lower().endswith(".webm")
-                        or self.file.filename.lower().endswith(".webp")
-                        or self.file.filename.lower().endswith(".mp3")
-                    ):
-                        file_dir = os.path.join(prompt_image_dir, self.guild_id)
-                        file_path = os.path.join(
-                            file_dir,
-                            prompt_id + os.path.splitext(self.file.filename)[1],
-                        )
-                        os.makedirs(file_dir, exist_ok=True)
-                        await self.file.save(file_path)
-                        self.bot.prompt_info[prompt_id]["image"] = file_path
-                        await log_channel.send(file=discord.File(file_path))
-                    else:
-                        await interaction.response.send_message(
-                            "Please upload a .png, .jpg, .jpeg, .webm, .webp, or .mp3 file.",
-                            ephemeral=True,
-                        )"""
-            else:
-                print(f"Log channel not found: {log_channel_id}")
+            
             await interaction.response.send_message(
-                f"{prompt_id} Prompt added to successfully.", ephemeral=True
+                f"{tribute_id} prompt added to successfully.", ephemeral=True
             )
         except Exception as e:
             await interaction.response.send_message(
                 "An error occurred. Please try again.", ephemeral=True
             )
             print(f"Error: {e}")
-        # Saves prompts to json
-        self.bot.save()
