@@ -423,6 +423,8 @@ async def viewPrompt(interaction: discord.Interaction, prompt_id: str):
         await interaction.response.send_message("Prompt not found", ephemeral=True)
 
 
+"""
+Old save-prompt command - replaced by tributecommands.save_prompt with tribute_id
 @bot.tree.command(name="save-prompt", description="Stores prompt info using a modal UI")
 async def save_prompt(
     interaction: discord.Interaction, file: Optional[discord.Attachment]
@@ -450,6 +452,8 @@ async def save_prompt(
     except Exception as e:
         await interaction.response.send_message("An error occured. Please try again.")
         print(f"Error: {e}")
+"""
+
 
 
 @bot.tree.command(
@@ -469,7 +473,7 @@ async def add_to_prompt(interaction: discord.Interaction):
 async def sendPrompt(interaction: discord.Interaction, prompt_id: str):
     # Sends the prompt
     await interaction.response.defer(ephemeral=True)
-    
+
     prompt_id = prompt_id.strip().upper()
     guild_id = str(interaction.guild.id)
     if prompt_id in bot.prompt_info and interaction.guild.get_channel(
