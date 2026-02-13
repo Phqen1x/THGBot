@@ -604,8 +604,8 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 name="Discord User", value=tribute["user_mention"], inline=True
             )
 
-            if tribute.get("face_claim_url"):
-                embed.set_thumbnail(url=tribute["face_claim_url"])
+            if face_claim:
+                embed.set_thumbnail(url=tribute.get("face_claim_url"))
                 embed.add_field(name="Face Claim", value="✅ Updated", inline=False)
 
             if tribute.get("prompt_channel_id"):

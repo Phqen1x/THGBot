@@ -33,11 +33,20 @@
   "D1M": {
     "capacity": 10,
     "items": {
-      "1": "Test Item"
+      "1": "Safety Harness (2/2 uses.) [Prevents falls from ladders/bridges while equipped.]",
+      "2": "Tribute Uniform (1/3 Fabric)",
+      "3": "Alunos' Wolf Pendant [-10 Sanity penalty if unequipped.]",
+      "4": "Tekko (2/2 pieces.) [LVL 3; FM Dual-wield Parrying Gauntlet-type weapons.]",
+      "5": "Work Gloves (must equip; 2/2 uses.) [Prevents damage from failed Foraging rolls.]",
+      "6": "Ginkgo Leaves (1/1 uses.) [Medicinal Plant material]",
+      "7": "Bamboo Quiver (7/7 arrows; must equip.) [Adds +1 Inventory Space.]"
     },
     "equipped_capacity": 5,
     "equipped": {
-      "1": "Test Sword"
+      "1": "Tribute Uniform (0/3 Fabric)",
+      "2": "Qiang Bundle (3/3 spears) [LVL 3; DM/LR Simple Reach weapon.]",
+      "3": "Work Gloves (must equip; 2/2 uses.) [Prevents damage from failed Foraging rolls.]",
+      "4": "Gas Mask (1/1 Fabric) [Cures/Prevents Delirium while equipped.]"
     }
   }
 }
