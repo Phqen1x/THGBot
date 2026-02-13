@@ -162,7 +162,7 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 user_mention=user_mention,
                 guild_id=guild_id,
                 face_claim_url=face_claim_url,
-                prompt_channel_id=prompt_channel.id
+                prompt_channel_id=prompt_channel_id
             )
             
             # Auto-create empty inventory for this tribute with specified capacity
@@ -293,6 +293,197 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 embed.set_thumbnail(url=tribute_data['face_claim_url'])
             
             await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ Error: {str(e)}",
+                ephemeral=True
+            )
+    
+    @bot.tree.command(name="edit-tribute", description="Edit tribute information")
+    @discord.app_commands.describe(
+        tribute_id="Tribute ID to edit (e.g., D1F)",
+        new_tribute_id="(Optional) New tribute ID",
+        tribute_name="(Optional) New tribute name",
+        user="(Optional) New Discord user to link",
+        prompt_channel="(Optional) New channel for prompts (must be in category)",
+        face_claim="(Optional) New face claim image"
+    )
+    @discord.app_commands.autocomplete(prompt_channel=get_category_channels)
+    async def edit_tribute(
+        interaction: discord.Interaction,
+        tribute_id: str,
+        new_tribute_id: Optional[str] = None,
+        tribute_name: Optional[str] = None,
+        user: Optional[discord.User] = None,
+        prompt_channel: Optional[str] = None,
+        face_claim: Optional[discord.Attachment] = None
+    ):
+        """Edit tribute information including name, user mention, channel, image, or ID."""
+        
+        # Check Gamemaker role
+        if not any(role.name == "Gamemaker" for role in interaction.user.roles):
+            await interaction.response.send_message(
+                "❌ Permission Denied: You must have the Gamemaker role.",
+                ephemeral=True
+            )
+            return
+        
+        tribute_id = tribute_id.strip().upper()
+        
+        try:
+            # Get current tribute
+            tribute = db.get_tribute(tribute_id)
+            if not tribute:
+                await interaction.response.send_message(
+                    f"❌ Tribute not found: `{tribute_id}`",
+                    ephemeral=True
+                )
+                return
+            
+            # Prepare updates
+            updates = {}
+            
+            # Update name if provided
+            if tribute_name:
+                updates['tribute_name'] = tribute_name.strip()
+            
+            # Update user mention if provided
+            if user:
+                updates['user_mention'] = f"<@{user.id}>"
+            
+            # Update prompt channel if provided
+            if prompt_channel:
+                try:
+                    prompt_channel_id = int(prompt_channel)
+                    channel = interaction.guild.get_channel(prompt_channel_id)
+                    
+                    if not channel:
+                        await interaction.response.send_message(
+                            "❌ Channel not found.",
+                            ephemeral=True
+                        )
+                        return
+                    
+                    if not isinstance(channel, discord.TextChannel):
+                        await interaction.response.send_message(
+                            "❌ Prompt channel must be a text channel.",
+                            ephemeral=True
+                        )
+                        return
+                    
+                    # Validate channel is in configured category
+                    guild_id = str(interaction.guild.id)
+                    if guild_id in bot.config and bot.config[guild_id].get("category_id"):
+                        category = interaction.guild.get_channel(bot.config[guild_id]["category_id"])
+                        if category and channel.category_id != category.id:
+                            await interaction.response.send_message(
+                                f"❌ Prompt channel must be in the configured category.",
+                                ephemeral=True
+                            )
+                            return
+                    
+                    updates['prompt_channel_id'] = prompt_channel_id
+                except (ValueError, AttributeError):
+                    await interaction.response.send_message(
+                        "❌ Invalid channel specified.",
+                        ephemeral=True
+                    )
+                    return
+            
+            # Update face claim if provided
+            if face_claim:
+                updates['face_claim_url'] = face_claim.url
+            
+            # Handle tribute ID change
+            if new_tribute_id:
+                new_tribute_id = new_tribute_id.strip().upper()
+                
+                # Validate new ID format
+                if len(new_tribute_id) > 5 or not new_tribute_id[1].isdigit():
+                    await interaction.response.send_message(
+                        f"❌ Invalid tribute ID format: `{new_tribute_id}`. Format should be like D1F, D1M, etc.",
+                        ephemeral=True
+                    )
+                    return
+                
+                # Check if new ID already exists
+                if new_tribute_id != tribute_id:
+                    existing = db.get_tribute(new_tribute_id)
+                    if existing:
+                        await interaction.response.send_message(
+                            f"❌ Tribute ID `{new_tribute_id}` already exists.",
+                            ephemeral=True
+                        )
+                        return
+                    
+                    # Create new tribute record with new ID, copy data
+                    try:
+                        # Copy inventory
+                        old_inv = bot.storage.get_inventory(tribute_id)
+                        if old_inv:
+                            bot.storage.create_inventory(new_tribute_id, capacity=old_inv.get('capacity', 10))
+                            if old_inv.get('items'):
+                                for item_num, item_name in old_inv['items'].items():
+                                    bot.storage.add_inventory_item(new_tribute_id, item_name)
+                        
+                        # Create new tribute with updated fields
+                        new_tribute = db.create_tribute(
+                            tribute_id=new_tribute_id,
+                            tribute_name=updates.get('tribute_name', tribute['tribute_name']),
+                            user_id=tribute['user_id'],
+                            user_mention=updates.get('user_mention', tribute['user_mention']),
+                            guild_id=tribute['guild_id'],
+                            face_claim_url=updates.get('face_claim_url', tribute.get('face_claim_url')),
+                            prompt_channel_id=updates.get('prompt_channel_id', tribute.get('prompt_channel_id'))
+                        )
+                        
+                        # Delete old tribute
+                        db.delete_tribute(tribute_id)
+                        bot.storage.clear_inventory(tribute_id)
+                        
+                        tribute = new_tribute
+                    except Exception as e:
+                        await interaction.response.send_message(
+                            f"❌ Error changing tribute ID: {str(e)}",
+                            ephemeral=True
+                        )
+                        return
+                else:
+                    # Same ID, just apply other updates
+                    tribute = db.update_tribute(tribute_id, **updates)
+            else:
+                # No ID change, just apply updates
+                if updates:
+                    tribute = db.update_tribute(tribute_id, **updates)
+            
+            # Build response embed
+            embed = discord.Embed(
+                title="✅ Tribute Updated",
+                color=discord.Color.blue()
+            )
+            embed.add_field(name="Tribute ID", value=tribute['tribute_id'], inline=True)
+            embed.add_field(name="Tribute Name", value=tribute['tribute_name'], inline=True)
+            embed.add_field(name="Discord User", value=tribute['user_mention'], inline=True)
+            
+            if tribute.get('face_claim_url'):
+                embed.set_thumbnail(url=tribute['face_claim_url'])
+                embed.add_field(name="Face Claim", value="✅ Updated", inline=False)
+            
+            if tribute.get('prompt_channel_id'):
+                embed.add_field(name="Prompt Channel", value=f"<#{tribute['prompt_channel_id']}>", inline=True)
+            
+            embed.set_footer(text=f"Edited by {interaction.user.name}")
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+            # Log the command execution
+            await log_to_channel(
+                interaction,
+                "📝 Tribute Edited",
+                f"**{tribute['tribute_id']}** - {tribute['tribute_name']}\nTribute information updated.",
+                discord.Color.blue()
+            )
             
         except Exception as e:
             await interaction.response.send_message(

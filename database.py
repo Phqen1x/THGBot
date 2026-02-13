@@ -260,7 +260,7 @@ class SQLDatabase:
         with self._lock:
             with self.transaction() as conn:
                 cursor = conn.cursor()
-                allowed_fields = {'tribute_name', 'user_mention', 'guild_id'}
+                allowed_fields = {'tribute_name', 'user_mention', 'guild_id', 'face_claim_url', 'prompt_channel_id'}
                 updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
                 
                 if not updates:
