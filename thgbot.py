@@ -8,7 +8,7 @@ from confirmationview import ConfirmationView
 from utils import split_message
 from promptsender import send_all_prompts_concurrent
 from inventory import Inventory
-from inventory_commands import register_inventory_commands
+from inventory_commands import register_inventory_commands, _format_inventory_embed
 from database import SQLDatabase
 from storage import StorageManager
 from tributecommands import register_tribute_commands
@@ -543,14 +543,20 @@ async def sendPrompt(interaction: discord.Interaction, tribute_id: str):
             inventory_data = bot.storage.get_inventory(tribute_id)
             if inventory_data:
                 items = inventory_data.get('items', {})
-                if items:
-                    inventory_embed = discord.Embed(
-                        title=f"{tribute_id} Inventory",
-                        description="Associated inventory with this prompt",
-                        color=discord.Color.gold()
+                equipped = inventory_data.get('equipped', {})
+                capacity = inventory_data.get('capacity', 10)
+                equipped_capacity = inventory_data.get('equipped_capacity', 5)
+                
+                # Only send if there are items or equipped items
+                if items or equipped:
+                    inventory_embed = _format_inventory_embed(
+                        tribute_id=tribute_id,
+                        items=items,
+                        capacity=capacity,
+                        equipped=equipped,
+                        equipped_capacity=equipped_capacity,
+                        title="Prompt Inventory"
                     )
-                    items_text = "\n".join([f"**{num}.** {item}" for num, item in items.items()])
-                    inventory_embed.add_field(name="Items", value=items_text, inline=False)
                     await channel.send(embed=inventory_embed)
         except Exception as e:
             print(f"Failed to send inventory for {tribute_id}: {e}")
