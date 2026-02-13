@@ -55,26 +55,32 @@ class StorageManager:
         """Get inventory from JSON storage."""
         try:
             inventories = self.load_json_file(INVENTORIES_JSON)
-            if tribute_id.lower() in inventories:
-                return inventories[tribute_id.lower()]
+            if tribute_id.upper() in inventories:
+                return inventories[tribute_id.upper()]
             return None
         except Exception as e:
             logger.error(f"Failed to get inventory for {tribute_id}: {e}")
             return None
     
-    def create_inventory(self, tribute_id: str, capacity: int = 10) -> bool:
-        """Create inventory in JSON storage (or update capacity if exists)."""
+    def create_inventory(self, tribute_id: str, capacity: int = 10, equipped_capacity: int = 5) -> bool:
+        """Create inventory in JSON storage with both inventory and equipped sections."""
         try:
             inventories = self.load_json_file(INVENTORIES_JSON)
-            tribute_id_lower = tribute_id.lower()
+            tribute_id_upper = tribute_id.upper()
             
-            if tribute_id_lower in inventories:
-                # Update capacity if inventory already exists
-                inventories[tribute_id_lower]["capacity"] = capacity
-                logger.info(f"Updated inventory capacity for {tribute_id} to {capacity}")
+            if tribute_id_upper in inventories:
+                # Update capacities if inventory already exists
+                inventories[tribute_id_upper]["capacity"] = capacity
+                inventories[tribute_id_upper]["equipped_capacity"] = equipped_capacity
+                logger.info(f"Updated inventory capacity for {tribute_id} to {capacity}, equipped to {equipped_capacity}")
             else:
-                inventories[tribute_id_lower] = {"capacity": capacity, "items": {}}
-                logger.info(f"Created inventory for {tribute_id} with capacity {capacity}")
+                inventories[tribute_id_upper] = {
+                    "capacity": capacity,
+                    "items": {},
+                    "equipped_capacity": equipped_capacity,
+                    "equipped": {}
+                }
+                logger.info(f"Created inventory for {tribute_id} with capacity {capacity}, equipped capacity {equipped_capacity}")
             
             self.save_json_file(INVENTORIES_JSON, inventories)
             return True
@@ -86,14 +92,14 @@ class StorageManager:
         """Add item to inventory in JSON storage."""
         try:
             inventories = self.load_json_file(INVENTORIES_JSON)
-            if tribute_id.lower() not in inventories:
+            if tribute_id.upper() not in inventories:
                 logger.warning(f"Inventory not found for {tribute_id}")
                 return False
             
-            items = inventories[tribute_id.lower()].get("items", {})
+            items = inventories[tribute_id.upper()].get("items", {})
             next_num = max([int(k) for k in items.keys()] or [0]) + 1
             items[str(next_num)] = item_name
-            inventories[tribute_id.lower()]["items"] = items
+            inventories[tribute_id.upper()]["items"] = items
             
             self.save_json_file(INVENTORIES_JSON, inventories)
             return True
@@ -105,10 +111,10 @@ class StorageManager:
         """Remove item from inventory in JSON storage."""
         try:
             inventories = self.load_json_file(INVENTORIES_JSON)
-            if tribute_id.lower() not in inventories:
+            if tribute_id.upper() not in inventories:
                 return False
             
-            items = inventories[tribute_id.lower()].get("items", {})
+            items = inventories[tribute_id.upper()].get("items", {})
             if str(item_number) not in items:
                 return False
             
@@ -119,7 +125,7 @@ class StorageManager:
             for idx, (_, item_name) in enumerate(sorted(items.items()), 1):
                 rekeyed[str(idx)] = item_name
             
-            inventories[tribute_id.lower()]["items"] = rekeyed
+            inventories[tribute_id.upper()]["items"] = rekeyed
             self.save_json_file(INVENTORIES_JSON, inventories)
             return True
         except Exception as e:
@@ -127,19 +133,160 @@ class StorageManager:
             return False
     
     def clear_inventory(self, tribute_id: str) -> bool:
-        """Delete entire inventory entry for a tribute."""
+        """Clear all items from tribute's inventory and equipped sections."""
         try:
             inventories = self.load_json_file(INVENTORIES_JSON)
-            tribute_id_lower = tribute_id.lower()
-            if tribute_id_lower not in inventories:
+            tribute_id_upper = tribute_id.upper()
+            if tribute_id_upper not in inventories:
                 return False
             
-            # Completely remove the tribute from inventories
-            del inventories[tribute_id_lower]
+            # Clear items and equipped, but keep the inventory structure
+            inventories[tribute_id_upper]["items"] = {}
+            inventories[tribute_id_upper]["equipped"] = {}
             self.save_json_file(INVENTORIES_JSON, inventories)
             return True
         except Exception as e:
             logger.error(f"Failed to clear inventory for {tribute_id}: {e}")
+            return False
+    
+    def delete_inventory(self, tribute_id: str) -> bool:
+        """Completely delete a tribute's inventory entry."""
+        try:
+            inventories = self.load_json_file(INVENTORIES_JSON)
+            tribute_id_upper = tribute_id.upper()
+            if tribute_id_upper not in inventories:
+                return False
+            
+            del inventories[tribute_id_upper]
+            self.save_json_file(INVENTORIES_JSON, inventories)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete inventory for {tribute_id}: {e}")
+            return False
+    
+    def equip_item(self, tribute_id: str, item_number: int) -> bool:
+        """Move item from inventory to equipped section."""
+        try:
+            inventories = self.load_json_file(INVENTORIES_JSON)
+            tribute_id_upper = tribute_id.upper()
+            
+            if tribute_id_upper not in inventories:
+                logger.error(f"Inventory not found for {tribute_id}")
+                return False
+            
+            inv = inventories[tribute_id_upper]
+            items = inv.get("items", {})
+            equipped = inv.get("equipped", {})
+            
+            item_key = str(item_number)
+            if item_key not in items:
+                logger.error(f"Item {item_number} not found in {tribute_id} inventory")
+                return False
+            
+            # Check equipped capacity
+            equipped_capacity = inv.get("equipped_capacity", 5)
+            if len(equipped) >= equipped_capacity:
+                logger.error(f"Equipped section is full for {tribute_id}")
+                return False
+            
+            # Move item
+            item_name = items[item_key]
+            del items[item_key]
+            
+            # Rekey inventory items
+            rekeyed_items = {}
+            for idx, (_, item) in enumerate(sorted(items.items()), 1):
+                rekeyed_items[str(idx)] = item
+            inv["items"] = rekeyed_items
+            
+            # Add to equipped
+            next_equipped_slot = max([int(k) for k in equipped.keys()] or [0]) + 1
+            equipped[str(next_equipped_slot)] = item_name
+            inv["equipped"] = equipped
+            
+            self.save_json_file(INVENTORIES_JSON, inventories)
+            logger.info(f"Moved item '{item_name}' to equipped for {tribute_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to equip item for {tribute_id}: {e}")
+            return False
+    
+    def unequip_item(self, tribute_id: str, item_number: int) -> bool:
+        """Move item from equipped section back to inventory."""
+        try:
+            inventories = self.load_json_file(INVENTORIES_JSON)
+            tribute_id_upper = tribute_id.upper()
+            
+            if tribute_id_upper not in inventories:
+                logger.error(f"Inventory not found for {tribute_id}")
+                return False
+            
+            inv = inventories[tribute_id_upper]
+            items = inv.get("items", {})
+            equipped = inv.get("equipped", {})
+            
+            item_key = str(item_number)
+            if item_key not in equipped:
+                logger.error(f"Item {item_number} not found in {tribute_id} equipped")
+                return False
+            
+            # Check inventory capacity
+            capacity = inv.get("capacity", 10)
+            if len(items) >= capacity:
+                logger.error(f"Inventory is full for {tribute_id}")
+                return False
+            
+            # Move item
+            item_name = equipped[item_key]
+            del equipped[item_key]
+            
+            # Rekey equipped items
+            rekeyed_equipped = {}
+            for idx, (_, item) in enumerate(sorted(equipped.items()), 1):
+                rekeyed_equipped[str(idx)] = item
+            inv["equipped"] = rekeyed_equipped
+            
+            # Add to inventory
+            next_inv_slot = max([int(k) for k in items.keys()] or [0]) + 1
+            items[str(next_inv_slot)] = item_name
+            inv["items"] = items
+            
+            self.save_json_file(INVENTORIES_JSON, inventories)
+            logger.info(f"Moved item '{item_name}' to inventory for {tribute_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to unequip item for {tribute_id}: {e}")
+            return False
+    
+    def add_equipped_item(self, tribute_id: str, item_name: str) -> bool:
+        """Add item directly to equipped section."""
+        try:
+            inventories = self.load_json_file(INVENTORIES_JSON)
+            tribute_id_upper = tribute_id.upper()
+            
+            if tribute_id_upper not in inventories:
+                logger.error(f"Inventory not found for {tribute_id}")
+                return False
+            
+            inv = inventories[tribute_id_upper]
+            equipped = inv.get("equipped", {})
+            
+            # Check equipped capacity
+            equipped_capacity = inv.get("equipped_capacity", 5)
+            if len(equipped) >= equipped_capacity:
+                logger.error(f"Equipped section is full for {tribute_id}")
+                return False
+            
+            # Add to equipped
+            next_slot = max([int(k) for k in equipped.keys()] or [0]) + 1
+            equipped[str(next_slot)] = item_name
+            inv["equipped"] = equipped
+            
+            self.save_json_file(INVENTORIES_JSON, inventories)
+            logger.info(f"Added '{item_name}' directly to equipped for {tribute_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to add equipped item for {tribute_id}: {e}")
             return False
     
     def search_inventory_items(self, item_name: str) -> List[Dict[str, Any]]:

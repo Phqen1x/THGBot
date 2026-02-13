@@ -7,6 +7,8 @@ def _format_inventory_embed(
     tribute_id: str, 
     items: dict, 
     capacity: int,
+    equipped: dict = None,
+    equipped_capacity: int = None,
     title: str = "Inventory",
     error: str = None
 ) -> discord.Embed:
@@ -21,14 +23,15 @@ def _format_inventory_embed(
         embed.description = error
         return embed
 
+    # Items section
     if not items:
-        embed.description = "*(Inventory is empty)*"
+        embed.add_field(name="Items", value="*(Inventory is empty)*", inline=False)
     else:
         item_list = "\n".join(f"{key}. {value}" for key, value in sorted(items.items(), key=lambda x: int(x[0])))
         embed.add_field(name="Items", value=item_list, inline=False)
 
     item_count = len(items)
-    embed.add_field(name="Item Count", value=f"{item_count}/{capacity}", inline=False)
+    embed.add_field(name="Item Count", value=f"{item_count}/{capacity}", inline=True)
 
     if item_count > capacity:
         embed.add_field(
@@ -36,6 +39,24 @@ def _format_inventory_embed(
             value=f"Inventory capacity ({capacity}) has been exceeded.",
             inline=False
         )
+
+    # Equipped section
+    if equipped is not None:
+        if not equipped:
+            embed.add_field(name="Equipped", value="*(No equipped items)*", inline=False)
+        else:
+            equipped_list = "\n".join(f"{key}. {value}" for key, value in sorted(equipped.items(), key=lambda x: int(x[0])))
+            embed.add_field(name="Equipped", value=equipped_list, inline=False)
+        
+        equipped_count = len(equipped)
+        if equipped_capacity:
+            embed.add_field(name="Equipped Count", value=f"{equipped_count}/{equipped_capacity}", inline=True)
+            if equipped_count > equipped_capacity:
+                embed.add_field(
+                    name="⚠️ WARNING",
+                    value=f"Equipped capacity ({equipped_capacity}) has been exceeded.",
+                    inline=False
+                )
 
     return embed
 
@@ -99,25 +120,28 @@ def register_inventory_commands(bot, inventory_manager):
                 tribute_id,
                 data["items"],
                 data["capacity"],
-                "Inventory"
+                equipped=data.get("equipped"),
+                equipped_capacity=data.get("equipped_capacity"),
+                title="Inventory"
             )
         else:
             embed = _format_inventory_embed(
                 tribute_id,
                 {},
                 0,
-                "Inventory",
+                title="Inventory",
                 error=data["error"]
             )
 
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @bot.tree.command(name="inventory-add", description="Add an item to a tribute's inventory")
+    @bot.tree.command(name="inventory-add", description="Add an item to a tribute's inventory or equipped section")
     @app_commands.describe(
         tribute_id="The tribute ID",
-        item="The item name to add"
+        item="The item name to add",
+        equipped="Add to equipped section instead of inventory (default: False)"
     )
-    async def inventory_add(interaction: discord.Interaction, tribute_id: str, item: str):
+    async def inventory_add(interaction: discord.Interaction, tribute_id: str, item: str, equipped: bool = False):
         if not has_gamemaker_role(interaction):
             await interaction.response.send_message(
                 "❌ You do not have permission to use this command. (Gamemaker role required)",
@@ -127,21 +151,28 @@ def register_inventory_commands(bot, inventory_manager):
 
         await interaction.response.defer(ephemeral=True)
 
-        success, data = inventory_manager.add_to_inventory(tribute_id, item)
+        if equipped:
+            success, data = inventory_manager.add_to_equipped(tribute_id, item)
+            action = f"Added '{item}' to equipped for"
+        else:
+            success, data = inventory_manager.add_to_inventory(tribute_id, item)
+            action = f"Added '{item}' to"
 
         if success:
             embed = _format_inventory_embed(
                 tribute_id,
                 data["items"],
                 data["capacity"],
-                f"Added '{item}' to"
+                equipped=data.get("equipped"),
+                equipped_capacity=data.get("equipped_capacity"),
+                title=action
             )
         else:
             embed = _format_inventory_embed(
                 tribute_id,
                 {},
                 0,
-                "Add to Inventory",
+                title="Add to Inventory",
                 error=data["error"]
             )
 
@@ -169,14 +200,16 @@ def register_inventory_commands(bot, inventory_manager):
                 tribute_id,
                 data["items"],
                 data["capacity"],
-                f"Removed '{item}' from"
+                equipped=data.get("equipped"),
+                equipped_capacity=data.get("equipped_capacity"),
+                title=f"Removed '{item}' from"
             )
         else:
             embed = _format_inventory_embed(
                 tribute_id,
                 {},
                 0,
-                "Remove from Inventory",
+                title="Remove from Inventory",
                 error=data["error"]
             )
 
@@ -233,6 +266,78 @@ def register_inventory_commands(bot, inventory_manager):
         else:
             embed = discord.Embed(
                 title="Clear Inventory",
+                description=data["error"],
+                color=discord.Color.red()
+            )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @bot.tree.command(name="inventory-equip", description="Move an item from inventory to equipped")
+    @app_commands.describe(
+        tribute_id="The tribute ID",
+        item_number="The item number to equip"
+    )
+    async def inventory_equip(interaction: discord.Interaction, tribute_id: str, item_number: int):
+        if not has_gamemaker_role(interaction):
+            await interaction.response.send_message(
+                "❌ You do not have permission to use this command. (Gamemaker role required)",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        success, data = inventory_manager.equip_item(tribute_id, str(item_number))
+
+        if success:
+            embed = _format_inventory_embed(
+                tribute_id,
+                data["items"],
+                data["capacity"],
+                equipped=data.get("equipped"),
+                equipped_capacity=data.get("equipped_capacity"),
+                title="Item Equipped"
+            )
+            embed.description = data.get("message")
+        else:
+            embed = discord.Embed(
+                title="Equip Item",
+                description=data["error"],
+                color=discord.Color.red()
+            )
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    @bot.tree.command(name="inventory-unequip", description="Move an item from equipped back to inventory")
+    @app_commands.describe(
+        tribute_id="The tribute ID",
+        item_number="The equipped item number to unequip"
+    )
+    async def inventory_unequip(interaction: discord.Interaction, tribute_id: str, item_number: int):
+        if not has_gamemaker_role(interaction):
+            await interaction.response.send_message(
+                "❌ You do not have permission to use this command. (Gamemaker role required)",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        success, data = inventory_manager.unequip_item(tribute_id, str(item_number))
+
+        if success:
+            embed = _format_inventory_embed(
+                tribute_id,
+                data["items"],
+                data["capacity"],
+                equipped=data.get("equipped"),
+                equipped_capacity=data.get("equipped_capacity"),
+                title="Item Unequipped"
+            )
+            embed.description = data.get("message")
+        else:
+            embed = discord.Embed(
+                title="Unequip Item",
                 description=data["error"],
                 color=discord.Color.red()
             )

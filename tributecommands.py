@@ -167,8 +167,9 @@ def register_tribute_commands(bot, db: SQLDatabase):
             
             # Auto-create empty inventory for this tribute with specified capacity
             try:
-                bot.storage.create_inventory(tribute_id, capacity=inventory_capacity)
-                logger.info(f"Created inventory for tribute {tribute_id} with capacity {inventory_capacity}")
+                bot.storage.create_inventory(tribute_id, capacity=inventory_capacity, equipped_capacity=5)
+                bot.inventory.create_tribute_inventory(tribute_id, capacity=inventory_capacity, equipped_capacity=5)
+                logger.info(f"Created inventory for tribute {tribute_id} with capacity {inventory_capacity}, equipped capacity 5")
             except Exception as inv_err:
                 # Log but don't fail - tribute still created
                 logger.warning(f"Could not create inventory for {tribute_id}: {inv_err}")
@@ -257,11 +258,21 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 inv_data = bot.storage.get_inventory(tribute_id)
                 if inv_data:
                     items = inv_data.get('items', {})
+                    equipped = inv_data.get('equipped', {})
                     capacity = inv_data.get('capacity', 10)
+                    equipped_capacity = inv_data.get('equipped_capacity', 5)
+                    
                     items_str = "\n".join([f"#{num}: {name}" for num, name in items.items()]) if items else "Empty"
                     embed.add_field(
                         name=f"📦 Inventory ({len(items)}/{capacity} items)",
                         value=items_str,
+                        inline=False
+                    )
+                    
+                    equipped_str = "\n".join([f"#{num}: {name}" for num, name in equipped.items()]) if equipped else "Empty"
+                    embed.add_field(
+                        name=f"⚔️ Equipped ({len(equipped)}/{equipped_capacity} items)",
+                        value=equipped_str,
                         inline=False
                     )
             
@@ -307,7 +318,9 @@ def register_tribute_commands(bot, db: SQLDatabase):
         tribute_name="(Optional) New tribute name",
         user="(Optional) New Discord user to link",
         prompt_channel="(Optional) New channel for prompts (must be in category)",
-        face_claim="(Optional) New face claim image"
+        face_claim="(Optional) New face claim image",
+        inventory_capacity="(Optional) New inventory capacity",
+        equipped_capacity="(Optional) New equipped section capacity"
     )
     @discord.app_commands.autocomplete(prompt_channel=get_category_channels)
     async def edit_tribute(
@@ -317,9 +330,11 @@ def register_tribute_commands(bot, db: SQLDatabase):
         tribute_name: Optional[str] = None,
         user: Optional[discord.User] = None,
         prompt_channel: Optional[str] = None,
-        face_claim: Optional[discord.Attachment] = None
+        face_claim: Optional[discord.Attachment] = None,
+        inventory_capacity: Optional[int] = None,
+        equipped_capacity: Optional[int] = None
     ):
-        """Edit tribute information including name, user mention, channel, image, or ID."""
+        """Edit tribute information including name, user mention, channel, image, capacity, or ID."""
         
         # Check Gamemaker role
         if not any(role.name == "Gamemaker" for role in interaction.user.roles):
@@ -395,6 +410,19 @@ def register_tribute_commands(bot, db: SQLDatabase):
             if face_claim:
                 updates['face_claim_url'] = face_claim.url
             
+            # Update inventory capacity if provided
+            capacity_changed = False
+            new_inv_capacity = inventory_capacity
+            new_eq_capacity = equipped_capacity
+            if inventory_capacity is not None or equipped_capacity is not None:
+                capacity_changed = True
+                old_inv = bot.storage.get_inventory(tribute_id)
+                if old_inv:
+                    if inventory_capacity is None:
+                        new_inv_capacity = old_inv.get('capacity', 10)
+                    if equipped_capacity is None:
+                        new_eq_capacity = old_inv.get('equipped_capacity', 5)
+            
             # Handle tribute ID change
             if new_tribute_id:
                 new_tribute_id = new_tribute_id.strip().upper()
@@ -419,13 +447,17 @@ def register_tribute_commands(bot, db: SQLDatabase):
                     
                     # Create new tribute record with new ID, copy data
                     try:
-                        # Copy inventory
+                        # Copy inventory with updated capacity if changed
                         old_inv = bot.storage.get_inventory(tribute_id)
                         if old_inv:
-                            bot.storage.create_inventory(new_tribute_id, capacity=old_inv.get('capacity', 10))
+                            final_inv_capacity = new_inv_capacity if new_inv_capacity else old_inv.get('capacity', 10)
+                            final_eq_capacity = new_eq_capacity if new_eq_capacity else old_inv.get('equipped_capacity', 5)
+                            bot.storage.create_inventory(new_tribute_id, capacity=final_inv_capacity, equipped_capacity=final_eq_capacity)
+                            bot.inventory.create_tribute_inventory(new_tribute_id, capacity=final_inv_capacity, equipped_capacity=final_eq_capacity)
                             if old_inv.get('items'):
                                 for item_num, item_name in old_inv['items'].items():
                                     bot.storage.add_inventory_item(new_tribute_id, item_name)
+                                    bot.inventory.add_to_inventory(new_tribute_id, item_name)
                         
                         # Create new tribute with updated fields
                         new_tribute = db.create_tribute(
@@ -440,7 +472,8 @@ def register_tribute_commands(bot, db: SQLDatabase):
                         
                         # Delete old tribute
                         db.delete_tribute(tribute_id)
-                        bot.storage.clear_inventory(tribute_id)
+                        bot.storage.delete_inventory(tribute_id)
+                        bot.inventory.delete_tribute_inventory(tribute_id)
                         
                         tribute = new_tribute
                     except Exception as e:
@@ -457,6 +490,13 @@ def register_tribute_commands(bot, db: SQLDatabase):
                 if updates:
                     tribute = db.update_tribute(tribute_id, **updates)
             
+            # Update inventory capacity if changed
+            if capacity_changed:
+                old_inv = bot.storage.get_inventory(tribute_id)
+                if old_inv:
+                    bot.storage.create_inventory(tribute_id, capacity=new_inv_capacity, equipped_capacity=new_eq_capacity)
+                    bot.inventory.create_tribute_inventory(tribute_id, capacity=new_inv_capacity, equipped_capacity=new_eq_capacity)
+            
             # Build response embed
             embed = discord.Embed(
                 title="✅ Tribute Updated",
@@ -472,6 +512,10 @@ def register_tribute_commands(bot, db: SQLDatabase):
             
             if tribute.get('prompt_channel_id'):
                 embed.add_field(name="Prompt Channel", value=f"<#{tribute['prompt_channel_id']}>", inline=True)
+            
+            if capacity_changed:
+                embed.add_field(name="Inventory Capacity", value=f"{new_inv_capacity} slots", inline=True)
+                embed.add_field(name="Equipped Capacity", value=f"{new_eq_capacity} slots", inline=True)
             
             embed.set_footer(text=f"Edited by {interaction.user.name}")
             
@@ -579,9 +623,10 @@ def register_tribute_commands(bot, db: SQLDatabase):
             # Delete the tribute (cascades to inventory, prompts, files)
             db.delete_tribute(tribute_id)
             
-            # Also delete from storage/JSON inventory
+            # Also delete from both storage layers
             try:
-                bot.storage.clear_inventory(tribute_id)
+                bot.storage.delete_inventory(tribute_id)
+                bot.inventory.delete_tribute_inventory(tribute_id)
             except:
                 pass  # Storage cleanup non-critical
             
