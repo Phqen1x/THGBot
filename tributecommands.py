@@ -9,6 +9,9 @@ from inventory import Inventory
 from typing import Optional
 import time
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 def register_tribute_commands(bot, db: SQLDatabase):
     """Register all tribute commands with the bot."""
@@ -67,13 +70,11 @@ def register_tribute_commands(bot, db: SQLDatabase):
             
             # Auto-create empty inventory for this tribute
             try:
-                datadir = os.environ.get("SNAP_DATA", ".")
-                inv_path = os.path.join(datadir, "config/inventories.json")
-                inventory = Inventory(inv_path)
-                inventory.create_tribute_inventory(tribute_id, capacity=10)
+                bot.storage.create_inventory(tribute_id, capacity=10)
+                logger.info(f"Created inventory for tribute {tribute_id}")
             except Exception as inv_err:
                 # Log but don't fail - tribute still created
-                print(f"Warning: Could not create inventory for {tribute_id}: {inv_err}")
+                logger.warning(f"Could not create inventory for {tribute_id}: {inv_err}")
             
             embed = discord.Embed(
                 title="✅ Tribute Created",

@@ -174,6 +174,50 @@ class SQLDatabase:
                 logger.info("✓ Successfully added face_claim_url column")
             except sqlite3.OperationalError as e:
                 logger.error(f"Failed to add face_claim_url column: {e}")
+        
+        # Check if prompts table has prompt_id (old schema) - need to migrate to 1:1 relationship
+        cursor.execute("PRAGMA table_info(prompts)")
+        prompt_columns = [row[1] for row in cursor.fetchall()]
+        
+        if "prompt_id" in prompt_columns:
+            logger.info("Migrating prompts table from many:1 to 1:1 relationship (removing prompt_id)")
+            try:
+                # Rename old table
+                cursor.execute("ALTER TABLE prompts RENAME TO prompts_old")
+                
+                # Create new prompts table without prompt_id (1:1 relationship)
+                cursor.execute("""
+                    CREATE TABLE prompts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        tribute_id TEXT NOT NULL UNIQUE,
+                        message TEXT NOT NULL,
+                        channel_id INTEGER,
+                        created_at INTEGER,
+                        FOREIGN KEY (tribute_id) REFERENCES tributes(tribute_id) ON DELETE CASCADE
+                    )
+                """)
+                
+                # Copy data from old table (keeping only the most recent prompt per tribute)
+                cursor.execute("""
+                    INSERT INTO prompts (id, tribute_id, message, channel_id, created_at)
+                    SELECT id, tribute_id, message, channel_id, created_at
+                    FROM (
+                        SELECT * FROM prompts_old
+                        ORDER BY tribute_id, id DESC
+                    )
+                    GROUP BY tribute_id
+                """)
+                
+                # Drop old table
+                cursor.execute("DROP TABLE prompts_old")
+                
+                # Recreate index
+                cursor.execute("CREATE INDEX idx_prompts_tribute_id ON prompts(tribute_id)")
+                
+                conn.commit()
+                logger.info("✓ Successfully migrated prompts table to 1:1 relationship")
+            except sqlite3.OperationalError as e:
+                logger.error(f"Failed to migrate prompts table: {e}")
     
     # TRIBUTE CRUD OPERATIONS
     
