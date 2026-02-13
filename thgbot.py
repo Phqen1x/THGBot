@@ -20,6 +20,7 @@ import json
 import asyncio
 import re
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -901,12 +902,12 @@ async def add_file(
         return
 
     # Prepare file directory
-    file_dir = os.path.join(prompt_image_dir, guild_id)
+    file_dir = os.path.join(bot.prompt_image_dir, guild_id)
     os.makedirs(file_dir, exist_ok=True)
 
     # Save the file
     file_extension = os.path.splitext(file.filename)[1]
-    new_filename = f"{tribute_id}_{int(__import__('time').time())}{file_extension}"
+    new_filename = f"{tribute_id}_{int(time.time())}{file_extension}"
     file_path = os.path.join(file_dir, new_filename)
 
     try:
@@ -917,59 +918,24 @@ async def add_file(
         )
 
         # Log the file addition
-        log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
-        if log_channel:
-            log_embed = discord.Embed(
-                title=f"File added to {tribute_id}",
-                description=f"File: {file.filename}",
-                color=discord.Color.green(),
-            )
-            log_embed.set_author(
-                name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}"
-            )
-            await log_channel.send(embed=log_embed)
+        if guild_id in bot.config and bot.config[guild_id].get("log_channel_id"):
+            log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
+            if log_channel:
+                log_embed = discord.Embed(
+                    title=f"File added to {tribute_id}",
+                    description=f"File: {file.filename}",
+                    color=discord.Color.green(),
+                )
+                log_embed.set_author(
+                    name=f"{interaction.user.name}", icon_url=f"{interaction.user.avatar}"
+                )
+                log_embed.timestamp = discord.utils.utcnow()
+                await log_channel.send(embed=log_embed)
     except Exception as e:
         await interaction.followup.send(
             f"Error uploading file: {str(e)}", ephemeral=True
         )
         print(f"Error uploading file: {e}")
-
-        # Save the file
-        await file.save(file_path)
-        bot.prompt_info[prompt_id]["image"] = new_filename
-
-    # Save to persistent storage
-    bot.save()
-
-    # Log to log channel
-    if "log_channel_id" in bot.config[guild_id]:
-        log_channel = bot.get_channel(bot.config[guild_id]["log_channel_id"])
-        if log_channel:
-            log_embed = discord.Embed(
-                title=f"File added to {prompt_id}",
-                description=f"Added: `{new_filename if 'new_filename' in locals() else file.filename}`",
-                color=discord.Color.green(),
-            )
-            log_embed.set_author(
-                name=interaction.user.name,
-                icon_url=(
-                    interaction.user.avatar.url if interaction.user.avatar else None
-                ),
-            )
-            log_embed.timestamp = discord.utils.utcnow()
-            await log_channel.send(embed=log_embed)
-            await log_channel.send(file=await file.to_file())
-
-    # Confirm to user
-    file_count = (
-        len(bot.prompt_info[prompt_id]["image"])
-        if isinstance(bot.prompt_info[prompt_id].get("image"), list)
-        else 1
-    )
-    await interaction.followup.send(
-        f"{new_filename} added to prompt `{prompt_id}`. This prompt now has {file_count} file(s).",
-        ephemeral=True,
-    )
 
 
 bot.run(token)
